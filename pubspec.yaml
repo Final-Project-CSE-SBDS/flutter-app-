@@ -1,0 +1,30 @@
+name: ecg_monitor
+description: ECG Arrhythmia Classification App with Mamba AI Model
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # TFLite for ML inference
+  tflite_flutter: ^0.11.0
+  
+  # Material design
+  cupertino_icons: ^1.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+  
+  # Asset configuration
+  assets:
+    - assets/mamba_ecg.tflite
+    - assets/sample_ecg.csv

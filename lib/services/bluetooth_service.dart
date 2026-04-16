@@ -338,29 +338,3 @@ class BluetoothService {
     }
   }
 }
-
-  /// Disconnect from device
-  Future<void> disconnect() async {
-    try {
-      if (_connectedDevice != null) {
-        await _connectedDevice!.disconnect();
-        print('🔌 Disconnected');
-      }
-    } catch (e) {
-      print('❌ Error enabling notifications: $e');
-    }
-  }
-
-  /// Cleanup resources
-  Future<void> dispose() async {
-    try {
-      await stopScan();
-      await disconnectDevice();
-      await _scanSubscription?.cancel();
-      await _connectionSubscription?.cancel();
-      print('✓ BluetoothService disposed');
-    } catch (e) {
-      print('❌ Dispose error: $e');
-    }
-  }
-}

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import '../services/tflite_service.dart';
 import '../services/ecg_streaming_service.dart';
 import '../services/bluetooth_service.dart';
+import 'bluetooth_screen.dart';
 import '../widgets/ecg_graph.dart';
 import '../widgets/result_card.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 
 /// Home Screen - Real-time ECG Monitoring
 /// Main monitoring interface with live ECG graph and predictions
@@ -26,6 +28,11 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _showArrhythmiaAlert = false;
   String _lastPrediction = '';
   double _lastConfidence = 0.0;
+
+  /// Bluetooth State
+  fbp.BluetoothConnectionState _bluetoothConnectionState =
+      fbp.BluetoothConnectionState.disconnected;
+  fbp.BluetoothDevice? _connectedDevice;
   
   /// ECG Data
   List<double> _ecgBuffer = [];
@@ -59,7 +66,15 @@ class _HomeScreenState extends State<HomeScreen> {
       // Initialize ECG streaming
       await _streamingService.initialize();
 
-      // Set up callbacks
+      // Set up Bluetooth callbacks
+      _bluetoothService.onConnectionState((state) {
+        setState(() {
+          _bluetoothConnectionState = state;
+          _connectedDevice = _bluetoothService.connectedDevice;
+        });
+      });
+
+      // Set up ECG streaming callbacks
       _streamingService.onDataUpdate((buffer, latestValue) {
         setState(() {
           _ecgBuffer = buffer;
@@ -110,8 +125,9 @@ class _HomeScreenState extends State<HomeScreen> {
       // Send result via Bluetooth if connected
       if (_bluetoothService.isConnected) {
         await _bluetoothService.sendPredictionResult(
-          result['label'],
-          result['confidence'],
+          label: result['label'],
+          confidence: result['confidence'],
+          includeConfidence: true,
         );
       }
 
@@ -197,22 +213,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Connect to Bluetooth device
-  void _connectBluetooth() async {
+  void _connectBluetooth() {
     if (!mounted) return;
 
-    // Show connection dialog
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Bluetooth Connection'),
-        content: const Text('In production, this would scan for available devices. '
-            'The system is ready to send ECG predictions via Bluetooth.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
+    // Navigate to Bluetooth screen
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => BluetoothScreen(
+          bluetoothService: _bluetoothService,
+        ),
       ),
     );
   }
@@ -349,6 +359,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Build status banner
   Widget _buildStatusBanner() {
+    bool isBluetoothConnected =
+        _bluetoothConnectionState == fbp.BluetoothConnectionState.connected;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -358,6 +371,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Monitoring Status
           Row(
             children: [
               CircleAvatar(
@@ -385,12 +399,54 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: _isMonitoring ? Colors.green : Colors.grey,
                 ),
               ),
+              const Spacer(),
+              // Bluetooth Status Badge
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isBluetoothConnected
+                      ? Colors.blue.withOpacity(0.1)
+                      : Colors.grey.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isBluetoothConnected
+                        ? Colors.blue
+                        : Colors.grey,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isBluetoothConnected
+                          ? Icons.bluetooth_connected
+                          : Icons.bluetooth_disabled,
+                      size: 14,
+                      color: isBluetoothConnected
+                          ? Colors.blue
+                          : Colors.grey,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      isBluetoothConnected ? 'Connected' : 'Disconnected',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: isBluetoothConnected
+                            ? Colors.blue
+                            : Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
             _streamingService.isStreaming
-                ? 'Buffer: ${_streamingService.bufferFilledPercentage}% | Inferences: $_inferenceCount'
+                ? 'Buffer: ${_streamingService.bufferFilledPercentage}% | Inferences: $_inferenceCount${isBluetoothConnected && _connectedDevice != null ? ' | Sending to ${_connectedDevice!.name}' : ''}'
                 : 'Ready to monitor',
             style: const TextStyle(fontSize: 12, color: Colors.grey),
           ),

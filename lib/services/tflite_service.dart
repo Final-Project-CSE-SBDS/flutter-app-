@@ -1,5 +1,8 @@
 import 'package:tflite_flutter/tflite_flutter.dart';
 
+/// Callback for inference results
+typedef InferenceCallback = void Function(Map<String, dynamic> result);
+
 /// Service for TFLite model inference
 /// Handles loading the ECG classification model and running predictions
 class TFLiteService {
@@ -19,11 +22,19 @@ class TFLiteService {
   /// Model loaded flag
   bool _isModelLoaded = false;
 
+  /// Inference callback
+  InferenceCallback? _onInferenceComplete;
+
   /// Get model loaded status
   bool get isModelLoaded => _isModelLoaded;
 
   /// Get interpreter instance
   Interpreter? get interpreter => _interpreter;
+
+  /// Register inference callback
+  void onInferenceComplete(InferenceCallback callback) {
+    _onInferenceComplete = callback;
+  }
 
   /// Load the TFLite model
   /// Loads the model from assets and initializes the interpreter

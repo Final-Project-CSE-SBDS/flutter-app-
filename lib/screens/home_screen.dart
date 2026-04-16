@@ -1,10 +1,12 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import '../services/tflite_service.dart';
+import '../services/ecg_streaming_service.dart';
+import '../services/bluetooth_service.dart';
+import '../widgets/ecg_graph.dart';
 import '../widgets/result_card.dart';
 
-/// Home screen of the ECG Monitor application
-/// Handles ECG data input, model inference, and result display
+/// Home Screen - Real-time ECG Monitoring
+/// Main monitoring interface with live ECG graph and predictions
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
 
@@ -13,46 +15,155 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  /// TFLite service instance
+  /// Services
   late TFLiteService _tfliteService;
+  late ECGStreamingService _streamingService;
+  late BluetoothService _bluetoothService;
 
-  /// Current ECG data (187 values)
-  List<double>? _ecgData;
+  /// UI State
+  bool _isModelLoading = true;
+  bool _isMonitoring = false;
+  bool _showArrhythmiaAlert = false;
+  String _lastPrediction = '';
+  double _lastConfidence = 0.0;
+  
+  /// ECG Data
+  List<double> _ecgBuffer = [];
+  List<double> _displayData = [];
+  int _inferenceCount = 0;
 
-  /// Inference result
-  Map<String, dynamic>? _result;
+  /// Inference History
+  List<Map<String, dynamic>> _predictionHistory = [];
 
-  /// Loading states
-  bool _isModelLoading = false;
-  bool _isInferencing = false;
-
-  /// Lifecycle callbacks
   @override
   void initState() {
     super.initState();
-    _tfliteService = TFLiteService();
-    _initializeModel();
+    _initializeServices();
   }
 
-  @override
-  void dispose() {
-    _tfliteService.close();
-    super.dispose();
-  }
-
-  /// Initialize the TFLite model
-  Future<void> _initializeModel() async {
-    setState(() => _isModelLoading = true);
+  /// Initialize all services
+  Future<void> _initializeServices() async {
     try {
-      final success = await _tfliteService.loadModel();
-      if (!success) {
-        _showErrorDialog('Failed to load TFLite model');
+      _tfliteService = TFLiteService();
+      _streamingService = ECGStreamingService();
+      _bluetoothService = BluetoothService();
+
+      print('📦 Initializing services...');
+
+      // Load model
+      bool modelLoaded = await _tfliteService.loadModel();
+      if (!modelLoaded) {
+        throw Exception('Failed to load TFLite model');
+      }
+
+      // Initialize ECG streaming
+      await _streamingService.initialize();
+
+      // Set up callbacks
+      _streamingService.onDataUpdate((buffer, latestValue) {
+        setState(() {
+          _ecgBuffer = buffer;
+          _displayData = List.from(buffer);
+        });
+      });
+
+      _streamingService.onInferenceReady((buffer) {
+        _runInference(buffer);
+      });
+
+      setState(() => _isModelLoading = false);
+      print('✅ Services initialized');
+    } catch (e) {
+      print('❌ Initialization error: $e');
+      if (mounted) {
+        _showErrorDialog('Initialization Error: ${e.toString()}');
+      }
+    }
+  }
+
+  /// Run inference on ECG buffer
+  Future<void> _runInference(List<double> buffer) async {
+    if (buffer.length != 187) return;
+
+    try {
+      final result = await _tfliteService.runInference(buffer);
+
+      setState(() {
+        _inferenceCount++;
+        _lastPrediction = result['label'];
+        _lastConfidence = result['confidence'];
+        _showArrhythmiaAlert = result['isArrhythmia'];
+
+        // Add to history
+        _predictionHistory.insert(0, {
+          'label': result['label'],
+          'confidence': result['confidence'],
+          'timestamp': DateTime.now(),
+        });
+
+        // Keep last 20 predictions
+        if (_predictionHistory.length > 20) {
+          _predictionHistory.removeLast();
+        }
+      });
+
+      // Send result via Bluetooth if connected
+      if (_bluetoothService.isConnected) {
+        await _bluetoothService.sendPredictionResult(
+          result['label'],
+          result['confidence'],
+        );
+      }
+
+      // Show alert on arrhythmia
+      if (result['isArrhythmia'] && !_showArrhythmiaAlert) {
+        _showArrhythmiaDialog(result['confidence']);
       }
     } catch (e) {
-      _showErrorDialog('Error: ${e.toString()}');
-    } finally {
-      setState(() => _isModelLoading = false);
+      print('❌ Inference error: $e');
     }
+  }
+
+  /// Show arrhythmia alert dialog
+  void _showArrhythmiaDialog(double confidence) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning, color: Colors.red),
+            SizedBox(width: 8),
+            Text('⚠️ Arrhythmia Alert'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Abnormal heart rhythm detected!',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Confidence: ${confidence.toStringAsFixed(2)}%',
+              style: const TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Please seek medical attention if symptoms persist.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Generate random ECG-like signal (187 values)
@@ -61,26 +172,22 @@ class _HomeScreenState extends State<HomeScreen> {
     print('\n🔄 Generating sample ECG data...');
     
     const int length = 187;
-    final random = Random();
     final ecgData = <double>[];
 
     /// Generate realistic ECG-like signal using sine waves
     for (int i = 0; i < length; i++) {
       /// Base signal: combination of multiple frequencies
-      double t = i / length * 4 * pi;
+      double t = i / length * 4 * 3.14159;
       
       /// Main ECG component
-      double mainSignal = sin(t) * 0.5;
+      double mainSignal = (t).sin() * 0.5;
       
       /// Add harmonic content
-      mainSignal += sin(2 * t) * 0.3;
-      mainSignal += sin(0.5 * t) * 0.2;
-      
-      /// Add noise
-      double noise = (random.nextDouble() - 0.5) * 0.1;
+      mainSignal += (2 * t).sin() * 0.3;
+      mainSignal += (0.5 * t).sin() * 0.2;
       
       /// Normalize to reasonable range
-      double value = (mainSignal + noise) * 0.5 + 0.5;
+      double value = (mainSignal) * 0.5 + 0.5;
       
       /// Clamp between 0 and 1
       value = value.clamp(0.0, 1.0);
@@ -88,7 +195,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ecgData.add(value);
     }
 
-    setState(() => _ecgData = ecgData);
     print('✅ Sample ECG generated (${ecgData.length} values)');
     _showSnackbar('Sample ECG generated successfully!');
   }
@@ -100,70 +206,51 @@ class _HomeScreenState extends State<HomeScreen> {
     _showSnackbar('Use "Generate Sample ECG" to create test data');
   }
 
-
-  /// Normalize ECG data to 0-1 range
-  List<double> _normalizeECG(List<double> data) {
-    if (data.isEmpty) return data;
-
-    final min = data.reduce((a, b) => a < b ? a : b);
-    final max = data.reduce((a, b) => a > b ? a : b);
-    final range = max - min;
-
-    if (range == 0) {
-      return List.filled(data.length, 0.5);
-    }
-
-    return data.map((v) => (v - min) / range).toList();
-  }
-
-  /// Run inference on loaded ECG data
-  Future<void> _runInference() async {
-    if (_ecgData == null) {
-      _showSnackbar('Please load or generate ECG data first');
-      return;
-    }
-
-    setState(() => _isInferencing = true);
-
-    try {
-      print('\n🔍 Starting inference...');
-
-      /// Normalize ECG data
-      final normalized = _normalizeECG(_ecgData!);
-
-      /// Run inference
-      final result = await _tfliteService.runInference(normalized);
-
-      setState(() => _result = result);
-
-      /// Show alert if arrhythmia detected
-      if (result['isArrhythmia'] as bool) {
-        _showArrhythmiaAlert();
+  /// Start/Stop monitoring
+  void _toggleMonitoring() {
+    setState(() {
+      if (_isMonitoring) {
+        _streamingService.stopStreaming();
+        _isMonitoring = false;
+        print('⏹️  Monitoring stopped');
+      } else {
+        _streamingService.startStreaming();
+        _isMonitoring = true;
+        print('▶️  Monitoring started');
       }
-
-      print('✅ Inference completed');
-    } catch (e) {
-      _showErrorDialog('Inference error: $e');
-    } finally {
-      setState(() => _isInferencing = false);
-    }
+    });
   }
 
-  /// Show alert dialog for arrhythmia detection
-  void _showArrhythmiaAlert() {
+  /// Reset monitoring
+  void _resetMonitoring() {
+    _streamingService.reset();
+    setState(() {
+      _ecgBuffer.clear();
+      _displayData.clear();
+      _lastPrediction = '';
+      _lastConfidence = 0.0;
+      _showArrhythmiaAlert = false;
+      _inferenceCount = 0;
+      _predictionHistory.clear();
+    });
+    _showSnackbar('Monitoring reset');
+  }
+
+  /// Connect to Bluetooth device
+  void _connectBluetooth() async {
+    if (!mounted) return;
+
+    // Show connection dialog
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('⚠️ Alert'),
-        content: const Text(
-          'Abnormal heartbeat detected!\n\nPlease consult a healthcare professional.',
-        ),
-        backgroundColor: const Color(0xFFFFEBEE),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text('Bluetooth Connection'),
+        content: const Text('In production, this would scan for available devices. '
+            'The system is ready to send ECG predictions via Bluetooth.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            child: const Text('Close'),
           ),
         ],
       ),
@@ -172,191 +259,337 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Show error dialog
   void _showErrorDialog(String message) {
+    if (!mounted) return;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Error'),
         content: Text(message),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            child: const Text('Close'),
           ),
         ],
       ),
     );
   }
 
-  /// Show snackbar notification
+  /// Show snackbar
   void _showSnackbar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _streamingService.dispose();
+    _bluetoothService.dispose();
+    _tfliteService.close();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ECG Monitor (Mamba AI)'),
-        elevation: 0,
+        title: const Text('💓 Real-Time ECG Monitor'),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bluetooth),
+            onPressed: _connectBluetooth,
+            tooltip: 'Connect Bluetooth',
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              /// Header section
-              Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      const Icon(
-                        Icons.favorite,
-                        size: 48,
-                        color: Color(0xFF1E88E5),
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Arrhythmia Detection',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _isModelLoading
-                            ? 'Loading model...'
-                            : _tfliteService.isModelLoaded
-                                ? 'Model ready'
-                                : 'Model failed to load',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: _tfliteService.isModelLoaded
-                              ? Colors.green
-                              : Colors.red,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+      body: _isModelLoading
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Initializing ECG System...'),
+                ],
               ),
-              const SizedBox(height: 24),
+            )
+          : SingleChildScrollView(
+              child: Column(
+                children: [
+                  // Status Banner
+                  _buildStatusBanner(),
 
-              /// ECG Data Input Section
-              Text(
-                'Step 1: Generate ECG Data',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 12),
-
-              /// Generate sample button
-              ElevatedButton.icon(
-                onPressed: _generateSampleECG,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Generate Sample ECG'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  backgroundColor: const Color(0xFF1976D2),
-                ),
-              ),
-
-              /// Data loaded indicator
-              if (_ecgData != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE8F5E9),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFF4CAF50)),
-                    ),
-                    child: Row(
+                  // ECG Graph
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.check_circle,
-                            color: Color(0xFF4CAF50)),
-                        const SizedBox(width: 12),
-                        Text(
-                          'ECG Data Loaded: ${_ecgData!.length} values',
-                          style: const TextStyle(
-                            color: Color(0xFF2E7D32),
-                            fontWeight: FontWeight.w600,
+                        const Text(
+                          'Live ECG Waveform',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 250,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey),
+                            borderRadius: BorderRadius.circular(8),
+                            color: Colors.white,
+                          ),
+                          child: ECGGraphWidget(
+                            ecgData: _displayData,
+                            lineColor: _showArrhythmiaAlert
+                                ? Colors.red
+                                : Colors.blue,
                           ),
                         ),
                       ],
                     ),
                   ),
-                ),
-              const SizedBox(height: 32),
 
-              /// Analysis Section
-              Text(
-                'Step 2: Run Analysis',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 12),
-
-              /// Analyze button
-              ElevatedButton.icon(
-                onPressed: _isInferencing || _ecgData == null
-                    ? null
-                    : _runInference,
-                icon: _isInferencing
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : const Icon(Icons.play_arrow),
-                label: Text(_isInferencing ? 'Analyzing...' : 'Analyze'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  backgroundColor: const Color(0xFF4CAF50),
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              /// Results Section
-              if (_result != null)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Analysis Result',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 12),
-                    ResultCard(
-                      label: _result!['label'],
-                      rawOutput: _result!['rawOutput'],
-                      confidence: _result!['confidence'],
-                      isArrhythmia: _result!['isArrhythmia'],
-                      onAcknowledge: () => setState(() => _result = null),
+                  // Latest Result
+                  if (_lastPrediction.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      child: ResultCard(
+                        label: _lastPrediction,
+                        rawOutput: _lastConfidence / 100,
+                        confidence: _lastConfidence,
+                        isArrhythmia: _lastPrediction == 'ARRHYTHMIA',
+                      ),
                     ),
                   ],
+
+                  // Monitoring Stats
+                  _buildMonitoringStats(),
+
+                  // Control Buttons
+                  _buildControlButtons(),
+
+                  // Prediction History
+                  if (_predictionHistory.isNotEmpty)
+                    _buildPredictionHistory(),
+
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+    );
+  }
+
+  /// Build status banner
+  Widget _buildStatusBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      color: _isMonitoring
+          ? Colors.green.withOpacity(0.1)
+          : Colors.grey.withOpacity(0.1),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 8,
+                backgroundColor:
+                    _isMonitoring ? Colors.green : Colors.grey,
+                child: _isMonitoring
+                    ? const SizedBox(
+                        width: 8,
+                        height: 8,
+                        child: CircularProgressIndicator(
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _isMonitoring ? '● Live Monitoring...' : '○ Stopped',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: _isMonitoring ? Colors.green : Colors.grey,
                 ),
+              ),
             ],
           ),
-        ),
+          const SizedBox(height: 8),
+          Text(
+            _streamingService.isStreaming
+                ? 'Buffer: ${_streamingService.bufferFilledPercentage}% | Inferences: $_inferenceCount'
+                : 'Ready to monitor',
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+        ],
       ),
     );
+  }
+
+  /// Build monitoring stats
+  Widget _buildMonitoringStats() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildStatCard(
+              title: 'Total Scans',
+              value: '$_inferenceCount',
+              icon: Icons.assessment,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildStatCard(
+              title: 'Buffer Fill',
+              value: '${_streamingService.bufferFilledPercentage}%',
+              icon: Icons.storage,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildStatCard(
+              title: 'Data Points',
+              value: '${_streamingService.currentDataPoints}',
+              icon: Icons.data_usage,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build individual stat card
+  Widget _buildStatCard({
+    required String title,
+    required String value,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 20, color: Colors.blue),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build control buttons
+  Widget _buildControlButtons() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: _toggleMonitoring,
+              icon: Icon(_isMonitoring ? Icons.pause : Icons.play_arrow),
+              label: Text(_isMonitoring ? 'STOP' : 'START'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                backgroundColor:
+                    _isMonitoring ? Colors.red : Colors.green,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: _resetMonitoring,
+              icon: const Icon(Icons.refresh),
+              label: const Text('RESET'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build prediction history
+  Widget _buildPredictionHistory() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Recent Predictions',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey[300]!),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _predictionHistory.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final pred = _predictionHistory[index];
+                bool isArrhythmia = pred['label'] == 'ARRHYTHMIA';
+                return ListTile(
+                  leading: Icon(
+                    isArrhythmia ? Icons.warning : Icons.favorite,
+                    color: isArrhythmia ? Colors.red : Colors.green,
+                  ),
+                  title: Text(pred['label']),
+                  subtitle: Text(
+                      '${pred['confidence'].toStringAsFixed(1)}% at ${_formatTime(pred['timestamp'])}'),
+                  dense: true,
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Format time
+  String _formatTime(DateTime time) {
+    return '${time.hour}:${time.minute.toString().padLeft(2, '0')}:${time.second.toString().padLeft(2, '0')}';
   }
 }

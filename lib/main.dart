@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'screens/home_screen.dart';
+import 'screens/watch_screen.dart';
 
 void main() {
   runApp(const ECGMonitorApp());
 }
 
-/// Main app widget for ECG Arrhythmia Classification
+/// Main app widget for ECG Arrhythmia Classification with Real-Time Monitoring
 class ECGMonitorApp extends StatelessWidget {
   const ECGMonitorApp({Key? key}) : super(key: key);
 
@@ -51,7 +52,11 @@ class ECGMonitorApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         useMaterial3: true,
       ),
-      home: const HomeScreen(),
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const HomeScreen(),
+        '/watch': (context) => const WatchScreen(),
+      },
       debugShowCheckedModeBanner: false,
     );
   }

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:convert';
+import 'dart:math';
 import 'package:csv/csv.dart';
 import 'package:flutter/services.dart';
 
@@ -96,9 +96,9 @@ class ECGStreamingService {
       double t = i / 100.0;
       // Simulate ECG-like signal
       double value = 0.5 +
-          0.3 * (t % 1).sin() +
-          0.1 * ((2 * t) % 1).sin() +
-          0.05 * ((0.5 * t) % 1).sin();
+          0.3 * sin(t % 1) +
+          0.1 * sin((2 * t) % 1) +
+          0.05 * sin((0.5 * t) % 1);
       value = value.clamp(0.0, 1.0);
       _allECGData.add(value);
     }

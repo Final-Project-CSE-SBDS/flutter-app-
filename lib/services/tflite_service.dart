@@ -120,13 +120,18 @@ class TFLiteService {
       print('   Prediction: ${isArrhythmia ? "ARRHYTHMIA ⚠️" : "NORMAL ✓"}');
       print('   Confidence: ${confidence.toStringAsFixed(2)}%');
 
-      return {
+      final result = {
         'isArrhythmia': isArrhythmia,
         'rawOutput': probability,
         'confidence': confidence,
         'label': isArrhythmia ? 'ARRHYTHMIA' : 'NORMAL',
         'color': isArrhythmia ? 'red' : 'green',
       };
+
+      // Call callback if registered
+      _onInferenceComplete?.call(result);
+
+      return result;
     } catch (e) {
       print('❌ Inference error: $e');
       rethrow;

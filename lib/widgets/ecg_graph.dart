@@ -151,7 +151,6 @@ class _ECGGraphWidgetState extends State<ECGGraphWidget> {
                 show: true,
                 color: widget.lineColor.withOpacity(0.15),
               ),
-              shadowColor: widget.lineColor.withOpacity(0.4),
             ),
           ],
 
@@ -159,7 +158,6 @@ class _ECGGraphWidgetState extends State<ECGGraphWidget> {
           lineTouchData: LineTouchData(
             enabled: true,
             touchTooltipData: LineTouchTooltipData(
-              tooltipBgColor: Colors.blue.withOpacity(0.8),
               tooltipRoundedRadius: 8,
               getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
                 return touchedBarSpots.map(

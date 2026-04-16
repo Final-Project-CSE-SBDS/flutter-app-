@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../widgets/ecg_graph.dart';
 
@@ -74,8 +75,8 @@ class _WatchScreenState extends State<WatchScreen> {
       _displayECGData = List.generate(100, (i) {
         double t = i / 20.0;
         return 0.5 +
-            0.2 * (t % 1).sin() +
-            0.1 * ((2 * t) % 1).sin() * (label == 'ARRHYTHMIA' ? 2 : 1);
+            0.2 * sin(t % 1) +
+            0.1 * sin((2 * t) % 1) * (label == 'ARRHYTHMIA' ? 2 : 1);
       });
     });
   }

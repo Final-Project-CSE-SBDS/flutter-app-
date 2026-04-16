@@ -166,46 +166,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Generate random ECG-like signal (187 values)
-  /// Simulates a typical ECG waveform with normal characteristics
-  void _generateSampleECG() {
-    print('\n🔄 Generating sample ECG data...');
-    
-    const int length = 187;
-    final ecgData = <double>[];
-
-    /// Generate realistic ECG-like signal using sine waves
-    for (int i = 0; i < length; i++) {
-      /// Base signal: combination of multiple frequencies
-      double t = i / length * 4 * 3.14159;
-      
-      /// Main ECG component
-      double mainSignal = (t).sin() * 0.5;
-      
-      /// Add harmonic content
-      mainSignal += (2 * t).sin() * 0.3;
-      mainSignal += (0.5 * t).sin() * 0.2;
-      
-      /// Normalize to reasonable range
-      double value = (mainSignal) * 0.5 + 0.5;
-      
-      /// Clamp between 0 and 1
-      value = value.clamp(0.0, 1.0);
-      
-      ecgData.add(value);
-    }
-
-    print('✅ Sample ECG generated (${ecgData.length} values)');
-    _showSnackbar('Sample ECG generated successfully!');
-  }
-
-  /// Load ECG data from CSV file
-  /// Expected format: single column or comma-separated values
-  Future<void> _loadECGFile() async {
-    // File picker removed - use sample generation instead
-    _showSnackbar('Use "Generate Sample ECG" to create test data');
-  }
-
   /// Start/Stop monitoring
   void _toggleMonitoring() {
     setState(() {

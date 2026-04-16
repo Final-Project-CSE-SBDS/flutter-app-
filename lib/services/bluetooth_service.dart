@@ -3,13 +3,15 @@ import 'dart:convert';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 
 /// Callbacks for Bluetooth events
-typedef OnDeviceFound = void Function(fbp.BluetoothDevice device);
+typedef OnDeviceFound = void Function(fbp.BluetoothDevice device, int rssi);
 typedef OnConnectionState = void Function(fbp.BluetoothConnectionState state);
 typedef OnDataReceived = void Function(String data);
-typedef OnServicesDiscovered = void Function();
+typedef OnServicesDiscovered = void Function(List<fbp.BluetoothService> services);
+typedef OnCharacteristicFound = void Function(String serviceUUID, String characteristicUUID);
 
-/// Service for Bluetooth communication with wearable devices
-/// Handles real BLE scanning, connecting, discovering services, and sending data
+/// Service for Bluetooth Low Energy (BLE) communication
+/// Handles scanning, connection, service discovery, and data transmission
+/// with comprehensive error handling and debugging
 class BluetoothService {
   static final BluetoothService _instance = BluetoothService._internal();
 
@@ -19,64 +21,77 @@ class BluetoothService {
     return _instance;
   }
 
-  /// Connected device
+  // ============= Device State =============
   fbp.BluetoothDevice? _connectedDevice;
-
-  /// Scanning state
   bool _isScanning = false;
-
-  /// Connection state
   fbp.BluetoothConnectionState _connectionState =
       fbp.BluetoothConnectionState.disconnected;
 
-  /// Discovered services and characteristics
+  // ============= Services & Characteristics =============
   List<fbp.BluetoothService> _services = [];
   fbp.BluetoothCharacteristic? _writeCharacteristic;
+  fbp.BluetoothCharacteristic? _notifyCharacteristic;
+  final Map<String, fbp.BluetoothCharacteristic> _characteristicMap = {};
 
-  /// Callbacks
+  // ============= Callbacks =============
   OnDeviceFound? _onDeviceFound;
   OnConnectionState? _onConnectionState;
   OnDataReceived? _onDataReceived;
   OnServicesDiscovered? _onServicesDiscovered;
+  OnCharacteristicFound? _onCharacteristicFound;
 
-  /// Stream subscriptions
+  // ============= Stream Subscriptions =============
   StreamSubscription? _scanSubscription;
   StreamSubscription? _connectionSubscription;
+  StreamSubscription? _notifySubscription;
+  final List<StreamSubscription> _activeSubscriptions = [];
 
-  /// Service UUIDs (standard GATT services)
-  /// Using standard GATT UUIDs for broader smartwatch compatibility
+  // ============= Configuration =============
+  /// RSSI threshold for filtering weak signals (in dBm)
+  static const int rssiThreshold = -90;
+  
+  /// Timeout durations
+  static const Duration scanTimeout = Duration(seconds: 10);
+  static const Duration connectionTimeout = Duration(seconds: 15);
+  static const Duration discoveryTimeout = Duration(seconds: 5);
+
+  // ============= Standard GATT UUIDs =============
   static const String genericAccessServiceUUID = '00001800-0000-1000-8000-00805f9b34fb';
   static const String deviceInfoServiceUUID = '0000180a-0000-1000-8000-00805f9b34fb';
-  static const String genericAttributeServiceUUID = '00001801-0000-1000-8000-00805f9b34fb';
+  static const String batteryServiceUUID = '0000180f-0000-1000-8000-00805f9b34fb';
   
-  /// Custom service UUID (can be configured for specific smartwatches)
-  static const String customServiceUUID = '0000ffe0-0000-1000-8000-00805f9b34fb';
-  static const String customCharacteristicUUID = '0000ffe1-0000-1000-8000-00805f9b34fb';
+  // ============= Common Custom Service UUIDs =============
+  /// Nordic UART Service (common for smartwatches)
+  static const String nordicUartServiceUUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+  static const String nordicTxCharacteristicUUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+  static const String nordicRxCharacteristicUUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 
-  /// Getters
+  
+  // ============= Getters =============
   bool get isConnected => _connectionState == fbp.BluetoothConnectionState.connected;
   bool get isScanning => _isScanning;
   fbp.BluetoothDevice? get connectedDevice => _connectedDevice;
   fbp.BluetoothConnectionState get connectionState => _connectionState;
   bool get hasWriteCharacteristic => _writeCharacteristic != null;
   List<fbp.BluetoothService> get services => _services;
+  Map<String, fbp.BluetoothCharacteristic> get characteristics => _characteristicMap;
 
-  /// Register callbacks
+  // ============= Callback Registration =============
   void onDeviceFound(OnDeviceFound callback) => _onDeviceFound = callback;
-  void onConnectionState(OnConnectionState callback) =>
-      _onConnectionState = callback;
+  void onConnectionState(OnConnectionState callback) => _onConnectionState = callback;
   void onDataReceived(OnDataReceived callback) => _onDataReceived = callback;
-  void onServicesDiscovered(OnServicesDiscovered callback) =>
-      _onServicesDiscovered = callback;
+  void onServicesDiscovered(OnServicesDiscovered callback) => _onServicesDiscovered = callback;
+  void onCharacteristicFound(OnCharacteristicFound callback) => _onCharacteristicFound = callback;
 
-  /// Check Bluetooth availability
+  // ============= Bluetooth Initialization =============
+  /// Check if Bluetooth is supported
   Future<bool> checkBluetoothAvailable() async {
     try {
       bool isSupported = await fbp.FlutterBluePlus.isSupported;
-      print('✓ Bluetooth supported: $isSupported');
+      _log('✓ Bluetooth supported: $isSupported');
       return isSupported;
     } catch (e) {
-      print('❌ Error checking Bluetooth: $e');
+      _logError('Error checking Bluetooth: $e');
       return false;
     }
   }
@@ -84,37 +99,56 @@ class BluetoothService {
   /// Check if Bluetooth is enabled
   Future<bool> isBluetoothOn() async {
     try {
-      return await fbp.FlutterBluePlus.adapterState.first ==
+      bool isOn = await fbp.FlutterBluePlus.adapterState.first ==
           fbp.BluetoothAdapterState.on;
+      _log('Bluetooth is ${isOn ? 'ON' : 'OFF'}');
+      return isOn;
     } catch (e) {
-      print('❌ Error checking Bluetooth state: $e');
+      _logError('Error checking Bluetooth state: $e');
       return false;
     }
   }
 
-  /// Start scanning for devices
-  Future<void> startScan({Duration timeout = const Duration(seconds: 10)}) async {
+  // ============= Scanning Methods =============
+  /// Start scanning for BLE devices with filters
+  /// Shows all discoverable devices
+  Future<void> startScan({Duration timeout = scanTimeout}) async {
     try {
       if (_isScanning) {
-        print('⚠️  Scan already in progress');
+        _logWarn('Scan already in progress');
         return;
       }
 
-      print('🔍 Starting Bluetooth scan...');
+      _log('🔍 Starting BLE scan...');
       _isScanning = true;
 
-      // Listen to scan results
-      _scanSubscription?.cancel();
-      _scanSubscription = fbp.FlutterBluePlus.scanResults.listen((results) {
-        for (fbp.ScanResult result in results) {
-          if (result.device.name.isNotEmpty) {
-            print('📱 Found device: ${result.device.name} (${result.device.id})');
-            _onDeviceFound?.call(result.device);
-          }
-        }
-      });
+      // Cancel previous subscription
+      await _scanSubscription?.cancel();
 
-      // Start scan with filters
+      // Listen to scan results
+      _scanSubscription = fbp.FlutterBluePlus.scanResults.listen(
+        (results) {
+          for (fbp.ScanResult result in results) {
+            final device = result.device;
+            final rssi = result.rssi;
+            final name = device.name.isEmpty ? '(Unknown)' : device.name;
+
+            // Filter by RSSI threshold
+            if (rssi < rssiThreshold) {
+              _logWarn('📉 Device too far (RSSI: $rssi): $name');
+              continue;
+            }
+
+            _log('📱 Found device: $name (ID: ${device.id}, RSSI: $rssi dBm)');
+            _onDeviceFound?.call(device, rssi);
+          }
+        },
+        onError: (error) {
+          _logError('Scan error: $error');
+        },
+      );
+
+      // Start actual scan
       await fbp.FlutterBluePlus.startScan(
         timeout: timeout,
       );
@@ -126,8 +160,9 @@ class BluetoothService {
         }
       });
     } catch (e) {
-      print('❌ Scan error: $e');
+      _logError('Failed to start scan: $e');
       _isScanning = false;
+      rethrow;
     }
   }
 
@@ -135,56 +170,74 @@ class BluetoothService {
   Future<void> stopScan() async {
     try {
       if (!_isScanning) return;
-      
+
       await fbp.FlutterBluePlus.stopScan();
       _isScanning = false;
-      print('⏹️  Scan stopped');
+      _log('⏹️  Scan stopped');
     } catch (e) {
-      print('❌ Error stopping scan: $e');
+      _logError('Error stopping scan: $e');
     }
   }
 
-  /// Connect to device
-  Future<bool> connectToDevice(fbp.BluetoothDevice device) async {
+  // ============= Connection Methods =============
+  /// Connect to a specific device
+  Future<bool> connectToDevice(fbp.BluetoothDevice device, {bool autoConnect = false}) async {
     try {
-      print('🔗 Connecting to ${device.name}...');
+      _log('🔗 Connecting to ${device.name} (${device.id})...');
 
-      // Disconnect from current device first
+      // Disconnect from current device first if different
       if (_connectedDevice != null && _connectedDevice!.id != device.id) {
         await disconnectDevice();
       }
 
-      // Connect to new device
+      // Establish connection
       await device.connect(
-        autoConnect: false,
-        timeout: const Duration(seconds: 15),
+        autoConnect: autoConnect,
+        timeout: connectionTimeout,
       );
 
       _connectedDevice = device;
+      _log('✅ Connected to ${device.name}');
 
       // Listen to connection state changes
-      _connectionSubscription?.cancel();
-      _connectionSubscription = device.connectionState.listen((state) async {
-        print('Connection state changed: $state');
-        _connectionState = state;
-        _onConnectionState?.call(state);
+      await _setupConnectionStateListener();
 
-        if (state == fbp.BluetoothConnectionState.connected) {
-          print('✅ Connected to ${device.name}');
-          await _discoverServices();
-        } else if (state == fbp.BluetoothConnectionState.disconnected) {
-          print('❌ Disconnected from ${device.name}');
-          _connectedDevice = null;
-          _services = [];
-          _writeCharacteristic = null;
-        }
-      });
+      // Discover services after connection
+      await _discoverServices();
 
       return true;
     } catch (e) {
-      print('❌ Connection error: $e');
+      _logError('Connection failed: $e');
       _connectedDevice = null;
       return false;
+    }
+  }
+
+  /// Setup connection state listener
+  Future<void> _setupConnectionStateListener() async {
+    try {
+      if (_connectedDevice == null) return;
+
+      // Cancel previous subscription
+      await _connectionSubscription?.cancel();
+
+      _connectionSubscription = _connectedDevice!.connectionState.listen(
+        (state) async {
+          _log('📡 Connection state: $state');
+          _connectionState = state;
+          _onConnectionState?.call(state);
+
+          if (state == fbp.BluetoothConnectionState.disconnected) {
+            _log('❌ Device disconnected');
+            await _cleanup();
+          }
+        },
+        onError: (error) {
+          _logError('Connection listener error: $error');
+        },
+      );
+    } catch (e) {
+      _logError('Failed to setup connection listener: $e');
     }
   }
 
@@ -192,149 +245,262 @@ class BluetoothService {
   Future<void> disconnectDevice() async {
     try {
       if (_connectedDevice != null) {
+        _log('Disconnecting from ${_connectedDevice!.name}...');
         await _connectedDevice!.disconnect();
-        print('✓ Disconnected');
+        await _cleanup();
+        _log('✓ Disconnected');
       }
     } catch (e) {
-      print('❌ Disconnect error: $e');
+      _logError('Disconnect error: $e');
     }
   }
 
-  /// Discover GATT services and characteristics
+  /// Cleanup resources
+  Future<void> _cleanup() async {
+    _connectedDevice = null;
+    _connectionState = fbp.BluetoothConnectionState.disconnected;
+    _services = [];
+    _writeCharacteristic = null;
+    _notifyCharacteristic = null;
+    _characteristicMap.clear();
+
+    await _notifySubscription?.cancel();
+    for (var sub in _activeSubscriptions) {
+      await sub.cancel();
+    }
+    _activeSubscriptions.clear();
+  }
+
+  // ============= Service Discovery =============
+  /// Discover all GATT services and characteristics
   Future<void> _discoverServices() async {
     try {
       if (_connectedDevice == null) {
-        print('❌ No device connected');
+        _logError('No device connected');
         return;
       }
 
-      print('🔎 Discovering services...');
-      _services = await _connectedDevice!.discoverServices();
+      _log('🔎 Discovering GATT services and characteristics...');
 
-      if (_services.isEmpty) {
-        print('⚠️  No services discovered');
+      List<fbp.BluetoothService> services =
+          await _connectedDevice!.discoverServices();
+
+      if (services.isEmpty) {
+        _logWarn('No services discovered');
+        _onServicesDiscovered?.call([]);
         return;
       }
 
-      print('✅ Found ${_services.length} service(s)');
+      _services = services;
+      _log('✅ Discovered ${services.length} service(s)');
 
-      // Find a writable characteristic
-      for (var service in _services) {
-        print('📦 Service: ${service.uuid}');
-        
+      // Iterate through all services and characteristics
+      for (var service in services) {
+        final serviceUUID = service.uuid.toString().toLowerCase();
+        _log('');
+        _log('╔═══════════════════════════════════════════════════════════');
+        _log('║ Service: $serviceUUID');
+        _log('║ Characteristics: ${service.characteristics.length}');
+        _log('╚═══════════════════════════════════════════════════════════');
+
+        int charIndex = 0;
         for (var characteristic in service.characteristics) {
-          print('   Characteristic: ${characteristic.uuid}');
-          print('      Properties: ${characteristic.properties}');
+          charIndex++;
+          final charUUID = characteristic.uuid.toString().toLowerCase();
 
-          // Look for write capabilities
+          _characteristicMap[charUUID] = characteristic;
+
+          _log('  [$charIndex] UUID: $charUUID');
+          _log('      Properties: ${_formatProperties(characteristic.properties)}');
+          _log('      Read: ${characteristic.properties.read}, '
+              'Write: ${characteristic.properties.write}, '
+              'WriteNoResp: ${characteristic.properties.writeWithoutResponse}, '
+              'Notify: ${characteristic.properties.notify}, '
+              'Indicate: ${characteristic.properties.indicate}');
+
+          // Store writable characteristics
           if (characteristic.properties.write ||
               characteristic.properties.writeWithoutResponse) {
-            _writeCharacteristic = characteristic;
-            print('   ✓ Found writable characteristic: ${characteristic.uuid}');
-            _onServicesDiscovered?.call();
-            return;
+            if (_writeCharacteristic == null) {
+              _writeCharacteristic = characteristic;
+              _log('      ✓ [WRITABLE] Stored as primary write characteristic');
+            } else {
+              _log('      ✓ [WRITABLE] Alternative write characteristic available');
+            }
           }
+
+          // Store notify/indicate characteristics for reading data
+          if (characteristic.properties.notify ||
+              characteristic.properties.indicate) {
+            if (_notifyCharacteristic == null) {
+              _notifyCharacteristic = characteristic;
+              _log('      ✓ [NOTIFIABLE] Stored as primary notify characteristic');
+            } else {
+              _log('      ✓ [NOTIFIABLE] Alternative notify characteristic available');
+            }
+          }
+
+          _onCharacteristicFound?.call(serviceUUID, charUUID);
         }
       }
 
-      // If no standard write characteristic found, use first writable one found
-      if (_writeCharacteristic == null) {
-        print('⚠️  No standard writable characteristic found, searching...');
-        _onServicesDiscovered?.call();
+      _log('');
+      if (_writeCharacteristic != null) {
+        _log('✅ Found writable characteristic: ${_writeCharacteristic!.uuid}');
+        _log('   Can send data: ${_writeCharacteristic!.properties.write ? 'YES (with response)' : 'YES (without response)'}');
+      } else {
+        _logWarn('❌ No writable characteristic found - sending will fail!');
       }
+
+      if (_notifyCharacteristic != null) {
+        _log('✅ Found notify characteristic: ${_notifyCharacteristic!.uuid}');
+        await _enableNotifications(_notifyCharacteristic!);
+      }
+
+      _onServicesDiscovered?.call(_services);
     } catch (e) {
-      print('❌ Service discovery error: $e');
+      _logError('Service discovery error: $e');
+      _onServicesDiscovered?.call([]);
     }
   }
 
-  /// Send prediction result to connected device
-  /// Supports both simple format: "NORMAL" or "ARRHYTHMIA"
-  /// And detailed format: "NORMAL:99.5%"
+  /// Enable notifications on a characteristic
+  Future<void> _enableNotifications(fbp.BluetoothCharacteristic characteristic) async {
+    try {
+      if (!characteristic.properties.notify && !characteristic.properties.indicate) {
+        _logWarn('Characteristic does not support notify/indicate');
+        return;
+      }
+
+      _log('Setting up notifications for ${characteristic.uuid}...');
+      
+      // Set notify value
+      await characteristic.setNotifyValue(true);
+
+      // Listen to value changes
+      await _notifySubscription?.cancel();
+      _notifySubscription = characteristic.onValueReceived.listen(
+        (value) {
+          try {
+            String receivedData = utf8.decode(value);
+            _log('📥 Data received: $receivedData');
+            _onDataReceived?.call(receivedData);
+          } catch (e) {
+            _logError('Failed to decode received data: $e');
+          }
+        },
+        onError: (error) {
+          _logError('Notification listener error: $error');
+        },
+      );
+
+      _log('✓ Notifications enabled for ${characteristic.uuid}');
+    } catch (e) {
+      _logError('Error enabling notifications: $e');
+    }
+  }
+
+  // ============= Data Transmission =============
+  /// Send ECG prediction result to connected device
   Future<bool> sendPredictionResult({
     required String label,
     required double confidence,
     bool includeConfidence = true,
   }) async {
-    try {
-      if (!isConnected || _connectedDevice == null) {
-        print('⚠️  Not connected to device');
-        return false;
-      }
+    String message = includeConfidence
+        ? '$label:${confidence.toStringAsFixed(1)}%'
+        : label;
 
-      // Format message
-      String message = includeConfidence 
-          ? '$label:${confidence.toStringAsFixed(1)}%'
-          : label;
-
-      return await sendData(message);
-    } catch (e) {
-      print('❌ Send prediction error: $e');
-      return false;
-    }
+    return sendData(message);
   }
 
   /// Send raw data to connected device
+  /// Returns true if send was successful
   Future<bool> sendData(String data) async {
     try {
       if (!isConnected || _connectedDevice == null) {
-        print('⚠️  Not connected to device');
+        _logWarn('Not connected to device - cannot send data');
         return false;
       }
 
       if (_writeCharacteristic == null) {
-        print('❌ No writable characteristic available');
+        _logError('❌ No writable characteristic available - cannot send data!');
+        _log('💡 Possible solutions:');
+        _log('   1. Ensure the smartwatch is properly connected');
+        _log('   2. Check that the device supports BLE write operations');
+        _log('   3. Try reconnecting to the device');
         return false;
       }
 
-      // Convert string to bytes
       List<int> bytes = utf8.encode(data);
+      _log('📤 Sending: "$data" (${bytes.length} bytes)');
 
-      print('📤 Sending: $data (${bytes.length} bytes)');
+      // Send with appropriate method based on characteristics
+      if (_writeCharacteristic!.properties.write) {
+        // Write with response
+        await _writeCharacteristic!.write(bytes, withoutResponse: false);
+        _log('✅ Data sent (with response)');
+      } else if (_writeCharacteristic!.properties.writeWithoutResponse) {
+        // Write without response (faster)
+        await _writeCharacteristic!.write(bytes, withoutResponse: true);
+        _log('✅ Data sent (without response)');
+      } else {
+        _logError('Write characteristic has no write modes enabled');
+        return false;
+      }
 
-      // Write to characteristic
-      await _writeCharacteristic!.write(
-        bytes,
-        withoutResponse: _writeCharacteristic!.properties.writeWithoutResponse,
-      );
-
-      print('✅ Data sent successfully');
       return true;
     } catch (e) {
-      print('❌ Send data error: $e');
+      _logError('Failed to send data: $e');
       return false;
     }
   }
 
-  /// Enable notifications for characteristic
-  Future<void> enableNotifications(
-      fbp.BluetoothCharacteristic characteristic) async {
-    try {
-      if (characteristic.properties.notify) {
-        await characteristic.setNotifyValue(true);
-
-        characteristic.onValueReceived.listen((List<int> event) {
-          String receivedData = utf8.decode(event);
-          print('📥 Received: $receivedData');
-          _onDataReceived?.call(receivedData);
-        });
-
-        print('✓ Notifications enabled for ${characteristic.uuid}');
-      }
-    } catch (e) {
-      print('❌ Error enabling notifications: $e');
-    }
+  // ============= Utility Methods =============
+  /// Format characteristic properties for logging
+  String _formatProperties(fbp.CharacteristicProperties props) {
+    List<String> features = [];
+    if (props.read) features.add('READ');
+    if (props.write) features.add('WRITE');
+    if (props.writeWithoutResponse) features.add('WRITE_NO_RESP');
+    if (props.notify) features.add('NOTIFY');
+    if (props.indicate) features.add('INDICATE');
+    if (props.authenticatedSignedWrites) features.add('AUTH_SIGNED_WRITE');
+    if (props.extendedProperties) features.add('EXTENDED');
+    return features.isEmpty ? '[NONE]' : '[${features.join(', ')}]';
   }
 
-  /// Cleanup resources
+  /// Logging helper
+  void _log(String message) {
+    print('🔵 BLE: $message');
+  }
+
+  void _logWarn(String message) {
+    print('🟡 BLE: $message');
+  }
+
+  void _logError(String message) {
+    print('🔴 BLE: $message');
+  }
+
+  // ============= Cleanup =============
+  /// Dispose all subscriptions and resources
   Future<void> dispose() async {
     try {
-      await stopScan();
+      _log('Disposing BluetoothService...');
+      if (_isScanning) {
+        await stopScan();
+      }
       await disconnectDevice();
       await _scanSubscription?.cancel();
       await _connectionSubscription?.cancel();
-      print('✓ BluetoothService disposed');
+      await _notifySubscription?.cancel();
+      for (var sub in _activeSubscriptions) {
+        await sub.cancel();
+      }
+      _log('✓ Cleanup complete');
     } catch (e) {
-      print('❌ Dispose error: $e');
+      _logError('Dispose error: $e');
     }
   }
 }

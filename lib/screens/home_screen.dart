@@ -90,9 +90,9 @@ class _HomeScreenState extends State<HomeScreen> {
       });
 
       setState(() => _isModelLoading = false);
-      print('✅ Services initialized');
+      print(' Services initialized');
     } catch (e) {
-      print('❌ Initialization error: $e');
+      print(' Initialization error: $e');
       if (mounted) {
         _showErrorDialog('Initialization Error: ${e.toString()}');
       }
@@ -155,7 +155,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _showArrhythmiaDialog(result['confidence']);
       }
     } catch (e) {
-      print('❌ Inference error: $e');
+      print(' Inference error: $e');
     }
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/tflite_service.dart';
 import '../services/ecg_streaming_service.dart';
 import '../services/bluetooth_service.dart';
+import '../services/notification_service.dart';
 import 'bluetooth_screen.dart';
 import '../widgets/ecg_graph.dart';
 import '../widgets/result_card.dart';
@@ -21,6 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late TFLiteService _tfliteService;
   late ECGStreamingService _streamingService;
   late BluetoothService _bluetoothService;
+  late NotificationService _notificationService;
 
   /// UI State
   bool _isModelLoading = true;
@@ -54,6 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _tfliteService = TFLiteService();
       _streamingService = ECGStreamingService();
       _bluetoothService = BluetoothService();
+      _notificationService = NotificationService();
 
       print('📦 Initializing services...');
 
@@ -121,6 +124,22 @@ class _HomeScreenState extends State<HomeScreen> {
           _predictionHistory.removeLast();
         }
       });
+
+      // Format confidence for notification
+      final confidenceText = 'Confidence: ${result['confidence'].toStringAsFixed(2)}%';
+
+      // Send notification based on prediction
+      if (result['isArrhythmia']) {
+        await _notificationService.showArrhythmiaAlert(
+          confidence: confidenceText,
+          enableVibration: true,
+          enableSound: true,
+        );
+      } else {
+        await _notificationService.showNormalResult(
+          confidence: confidenceText,
+        );
+      }
 
       // Send result via Bluetooth if connected
       if (_bluetoothService.isConnected) {

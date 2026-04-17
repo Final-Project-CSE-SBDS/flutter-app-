@@ -26,7 +26,7 @@ dependencies:
   intl: ^0.19.0
   
   # Notifications for smartwatch
-  flutter_local_notifications: ^16.0.0
+  flutter_local_notifications: 14.1.0
   
   # Material design
   cupertino_icons: ^1.0.2

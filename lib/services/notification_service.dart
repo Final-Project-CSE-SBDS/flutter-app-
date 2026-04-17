@@ -79,13 +79,9 @@ class NotificationService {
       await androidImplementation?.createNotificationChannel(androidChannel);
 
       // Request permissions for Android 13+
-      final granted = await androidImplementation?.requestNotificationsPermission();
-      if (granted == true) {
-        _log('✅ Notification permissions granted');
-      } else {
-        _logWarn('⚠️  Notification permissions not granted');
-      }
-
+      // Note: requestNotificationsPermission() is only available in flutter_local_notifications > 14
+      // The permissions are declared in AndroidManifest.xml and will be requested by the system
+      
       _log('✅ Android notifications configured');
     } catch (e) {
       _logError('Failed to initialize Android notifications: $e');

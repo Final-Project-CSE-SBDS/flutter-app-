@@ -128,14 +128,23 @@ class _HomeScreenState extends State<HomeScreen> {
       // Format confidence for notification
       final confidenceText = 'Confidence: ${result['confidence'].toStringAsFixed(2)}%';
 
+      // Debug: Log inference result
+      print('🧠 Inference Result:');
+      print('   Label: ${result['label']}');
+      print('   Confidence: ${result['confidence'].toStringAsFixed(2)}%');
+      print('   Is Arrhythmia: ${result['isArrhythmia']}');
+
       // Send notification based on prediction
+      print('📬 Triggering notification service...');
       if (result['isArrhythmia']) {
+        print('   → Sending ARRHYTHMIA alert');
         await _notificationService.showArrhythmiaAlert(
           confidence: confidenceText,
           enableVibration: true,
           enableSound: true,
         );
       } else {
+        print('   → Sending NORMAL result');
         await _notificationService.showNormalResult(
           confidence: confidenceText,
         );
@@ -143,11 +152,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // Send result via Bluetooth if connected
       if (_bluetoothService.isConnected) {
+        print('📡 Bluetooth connected - sending prediction...');
         await _bluetoothService.sendPredictionResult(
           label: result['label'],
           confidence: result['confidence'],
           includeConfidence: true,
         );
+      } else {
+        print('📡 Bluetooth not connected - skipping BLE send');
       }
 
       // Show alert on arrhythmia
@@ -155,7 +167,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _showArrhythmiaDialog(result['confidence']);
       }
     } catch (e) {
-      print(' Inference error: $e');
+      print('❌ Inference error: $e');
     }
   }
 

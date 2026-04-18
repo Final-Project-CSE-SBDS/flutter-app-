@@ -48,6 +48,8 @@ class NotificationService {
   /// Android-specific initialization
   Future<void> _initializeAndroid() async {
     try {
+      _log('Initializing Android notifications...');
+      
       // Initialize Android notifications plugin
       const initializationSettings = InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
@@ -58,7 +60,13 @@ class NotificationService {
         ),
       );
 
-      await _notificationsPlugin.initialize(initializationSettings);
+      await _notificationsPlugin.initialize(
+        initializationSettings,
+        onDidReceiveNotificationResponse: (NotificationResponse response) {
+          _log('Notification tapped: ${response.payload}');
+        },
+      );
+      _log('✓ Flutter Local Notifications plugin initialized');
 
       // Create notification channel for high priority alerts
       const androidChannel = AndroidNotificationChannel(
@@ -68,6 +76,7 @@ class NotificationService {
         importance: Importance.max,
         enableVibration: true,
         playSound: true,
+        showBadge: true,
       );
 
       // Create the channel
@@ -76,13 +85,14 @@ class NotificationService {
               .resolvePlatformSpecificImplementation<
                   AndroidFlutterLocalNotificationsPlugin>();
 
-      await androidImplementation?.createNotificationChannel(androidChannel);
-
-      // Request permissions for Android 13+
-      // Note: requestNotificationsPermission() is only available in flutter_local_notifications > 14
-      // The permissions are declared in AndroidManifest.xml and will be requested by the system
+      if (androidImplementation != null) {
+        await androidImplementation.createNotificationChannel(androidChannel);
+        _log('✓ Android notification channel "ecg_predictions" created');
+      } else {
+        _logWarn('Could not resolve Android notification implementation');
+      }
       
-      _log('✅ Android notifications configured');
+      _log('✅ Android notifications configured successfully');
     } catch (e) {
       _logError('Failed to initialize Android notifications: $e');
     }
@@ -189,6 +199,8 @@ class NotificationService {
     bool enableSound = false,
   }) async {
     try {
+      _log('💭 Preparing notification (ID: $id, Title: $title)');
+      
       // Android notification details
       final androidDetails = AndroidNotificationDetails(
         'ecg_predictions',
@@ -199,6 +211,8 @@ class NotificationService {
         enableVibration: enableVibration,
         playSound: enableSound,
         autoCancel: true,
+        showWhen: true,
+        usesChronometer: false,
         styleInformation: BigTextStyleInformation(
           message,
           contentTitle: title,
@@ -216,6 +230,7 @@ class NotificationService {
       );
 
       // Show notification on both platforms
+      _log('📤 Sending notification to system...');
       await _notificationsPlugin.show(
         id,
         title,
@@ -225,13 +240,18 @@ class NotificationService {
           iOS: iosDetails,
         ),
       );
+      
+      _log('✅ Notification displayed successfully (ID: $id)');
 
       // Optional: Add device vibration for arrhythmia
       if (isArrhythmia && enableVibration && Platform.isAndroid) {
         _performVibration();
       }
     } catch (e) {
-      _logError('Error showing notification: $e');
+      _logError('❌ Error showing notification: $e');
+      _logError('   ID: $id, Title: $title');
+      _logError('   Message: $message');
+      rethrow;
     }
   }
 

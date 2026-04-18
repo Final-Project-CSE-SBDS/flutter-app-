@@ -62,7 +62,7 @@ class _WatchScreenState extends State<WatchScreen> {
     setState(() {
       _isConnected = _bluetoothService.isConnected;
     });
-    print('✅ [WatchScreen] BLE reception setup complete');
+    print(' [WatchScreen] BLE reception setup complete');
   }
 
   /// Parse received BLE data and update UI
@@ -111,7 +111,7 @@ class _WatchScreenState extends State<WatchScreen> {
 
   /// Update status with new prediction
   void _updateStatus(String label, double confidence) {
-    print('🎨 [WatchScreen] Updating UI - Label: $label, Confidence: ${confidence.toStringAsFixed(1)}%');
+    print(' [WatchScreen] Updating UI - Label: $label, Confidence: ${confidence.toStringAsFixed(1)}%');
     
     setState(() {
       _status = label;

@@ -62,12 +62,12 @@ class _WatchScreenState extends State<WatchScreen> {
     setState(() {
       _isConnected = _bluetoothService.isConnected;
     });
-    print(' [WatchScreen] BLE reception setup complete');
+    print('✅ [WatchScreen] BLE reception setup complete');
   }
 
   /// Parse received BLE data and update UI
-  /// Format: "NORMAL" or "ARRHYTHMIA" (optionally with confidence)
-  /// Examples: "NORMAL:99.5%", "ARRHYTHMIA:87.3%"
+  /// Format: "NORMAL" or "ARRHYTHMIA" (no confidence)
+  /// Examples: "NORMAL", "ARRHYTHMIA"
   void _parseAndUpdateStatus(String data) {
     try {
       print('🔍 [WatchScreen] Parsing BLE data: "$data"');
@@ -75,26 +75,8 @@ class _WatchScreenState extends State<WatchScreen> {
       // Trim whitespace
       String trimmedData = data.trim();
       
-      String label = 'NORMAL';
-      double confidence = 0.0;
-      
-      if (trimmedData.contains(':')) {
-        // Format: "LABEL:CONFIDENCE"
-        List<String> parts = trimmedData.split(':');
-        label = parts[0].trim().toUpperCase();
-        
-        String confStr = parts[1].trim().replaceAll('%', '');
-        try {
-          confidence = double.parse(confStr);
-        } catch (e) {
-          print('⚠️ [WatchScreen] Could not parse confidence: ${parts[1]}');
-          confidence = 0.0;
-        }
-      } else {
-        // Format: "LABEL" only
-        label = trimmedData.toUpperCase();
-        confidence = 100.0; // Default to 100% if no confidence given
-      }
+      String label = trimmedData.toUpperCase();
+      double confidence = 100.0; // Default confidence
       
       // Validate label
       if (label != 'NORMAL' && label != 'ARRHYTHMIA') {
@@ -111,7 +93,7 @@ class _WatchScreenState extends State<WatchScreen> {
 
   /// Update status with new prediction
   void _updateStatus(String label, double confidence) {
-    print(' [WatchScreen] Updating UI - Label: $label, Confidence: ${confidence.toStringAsFixed(1)}%');
+    print('🎨 [WatchScreen] Updating UI - Label: $label, Confidence: ${confidence.toStringAsFixed(1)}%');
     
     setState(() {
       _status = label;

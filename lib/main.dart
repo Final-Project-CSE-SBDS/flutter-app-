@@ -11,9 +11,12 @@ void main() async {
   final notificationService = NotificationService();
   await notificationService.initialize();
   
-  // Request notification permission (Android 13+)
+  // Request all required permissions
   print('🔔 Requesting notification permission...');
   await _requestNotificationPermission();
+  
+  print('🔵 Requesting Bluetooth permissions...');
+  await _requestBluetoothPermissions();
   
   runApp(const ECGMonitorApp());
 }
@@ -32,6 +35,38 @@ Future<void> _requestNotificationPermission() async {
     }
   } catch (e) {
     print('❌ Error requesting notification permission: $e');
+  }
+}
+
+/// Request Bluetooth permissions for Android 12+
+Future<void> _requestBluetoothPermissions() async {
+  try {
+    // Request BLUETOOTH_SCAN (Android 12+)
+    final scanStatus = await Permission.bluetoothScan.request();
+    if (scanStatus.isGranted) {
+      print('✅ BLUETOOTH_SCAN permission granted');
+    } else {
+      print('⚠️ BLUETOOTH_SCAN permission denied');
+    }
+    
+    // Request BLUETOOTH_CONNECT (Android 12+)
+    final connectStatus = await Permission.bluetoothConnect.request();
+    if (connectStatus.isGranted) {
+      print('✅ BLUETOOTH_CONNECT permission granted');
+    } else {
+      print('⚠️ BLUETOOTH_CONNECT permission denied');
+    }
+    
+    // Request ACCESS_FINE_LOCATION (required for BLE scanning)
+    final locationStatus = await Permission.location.request();
+    if (locationStatus.isGranted) {
+      print('✅ ACCESS_FINE_LOCATION permission granted');
+    } else {
+      print('⚠️ ACCESS_FINE_LOCATION permission denied');
+    }
+    
+  } catch (e) {
+    print('❌ Error requesting Bluetooth permissions: $e');
   }
 }
 

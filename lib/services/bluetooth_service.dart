@@ -114,6 +114,19 @@ class BluetoothService {
   /// Shows all discoverable devices
   Future<void> startScan({Duration timeout = scanTimeout}) async {
     try {
+      // Check Bluetooth availability first
+      bool isAvailable = await checkBluetoothAvailable();
+      if (!isAvailable) {
+        _logError('Bluetooth not available on this device');
+        return;
+      }
+
+      bool isOn = await isBluetoothOn();
+      if (!isOn) {
+        _logError('Bluetooth is turned off - please enable Bluetooth');
+        return;
+      }
+
       if (_isScanning) {
         _logWarn('Scan already in progress');
         return;
@@ -133,12 +146,7 @@ class BluetoothService {
             final rssi = result.rssi;
             final name = device.name.isEmpty ? '(Unknown)' : device.name;
 
-            // Filter by RSSI threshold
-            if (rssi < rssiThreshold) {
-              _logWarn('📉 Device too far (RSSI: $rssi): $name');
-              continue;
-            }
-
+            // Print ALL devices found (no RSSI filtering)
             _log('📱 Found device: $name (ID: ${device.id}, RSSI: $rssi dBm)');
             _onDeviceFound?.call(device, rssi);
           }
@@ -184,13 +192,16 @@ class BluetoothService {
   Future<bool> connectToDevice(fbp.BluetoothDevice device, {bool autoConnect = false}) async {
     try {
       _log('🔗 Connecting to ${device.name} (${device.id})...');
+      _log('   Device state: ${device.connectionState}');
 
       // Disconnect from current device first if different
       if (_connectedDevice != null && _connectedDevice!.id != device.id) {
+        _log('   Disconnecting from previous device first...');
         await disconnectDevice();
       }
 
       // Establish connection
+      _log('   Sending connection request...');
       await device.connect(
         autoConnect: autoConnect,
         timeout: connectionTimeout,
@@ -312,11 +323,11 @@ class BluetoothService {
 
           _log('  [$charIndex] UUID: $charUUID');
           _log('      Properties: ${_formatProperties(characteristic.properties)}');
-          _log('      Read: ${characteristic.properties.read}, '
-              'Write: ${characteristic.properties.write}, '
-              'WriteNoResp: ${characteristic.properties.writeWithoutResponse}, '
-              'Notify: ${characteristic.properties.notify}, '
-              'Indicate: ${characteristic.properties.indicate}');
+          _log('      Read: ${characteristic.properties.read}');
+          _log('      Write: ${characteristic.properties.write}');
+          _log('      WriteNoResp: ${characteristic.properties.writeWithoutResponse}');
+          _log('      Notify: ${characteristic.properties.notify}');
+          _log('      Indicate: ${characteristic.properties.indicate}');
 
           // Store writable characteristics
           if (characteristic.properties.write ||
@@ -405,7 +416,7 @@ class BluetoothService {
   Future<bool> sendPredictionResult({
     required String label,
     required double confidence,
-    bool includeConfidence = true,
+    bool includeConfidence = false, // Changed to false
   }) async {
     String message = includeConfidence
         ? '$label:${confidence.toStringAsFixed(1)}%'
@@ -429,19 +440,25 @@ class BluetoothService {
         _log('   1. Ensure the smartwatch is properly connected');
         _log('   2. Check that the device supports BLE write operations');
         _log('   3. Try reconnecting to the device');
+        _log('   4. Check service discovery logs above for writable characteristics');
         return false;
       }
 
       List<int> bytes = utf8.encode(data);
       _log('📤 Sending: "$data" (${bytes.length} bytes)');
+      _log('   Using characteristic: ${_writeCharacteristic!.uuid}');
+      _log('   Write with response: ${_writeCharacteristic!.properties.write}');
+      _log('   Write without response: ${_writeCharacteristic!.properties.writeWithoutResponse}');
 
       // Send with appropriate method based on characteristics
       if (_writeCharacteristic!.properties.write) {
         // Write with response
+        _log('   Sending with response...');
         await _writeCharacteristic!.write(bytes, withoutResponse: false);
         _log('✅ Data sent (with response)');
       } else if (_writeCharacteristic!.properties.writeWithoutResponse) {
         // Write without response (faster)
+        _log('   Sending without response...');
         await _writeCharacteristic!.write(bytes, withoutResponse: true);
         _log('✅ Data sent (without response)');
       } else {

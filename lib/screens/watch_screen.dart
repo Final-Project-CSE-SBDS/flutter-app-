@@ -1,9 +1,11 @@
 import 'dart:math';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../services/bluetooth_service.dart';
 import '../widgets/ecg_graph.dart';
 
-/// Watch Screen - Simulates a smartwatch display
-/// Receives ECG predictions via Bluetooth
+/// Watch Screen - Receives ECG predictions via Bluetooth
+/// Displays real-time BLE data from connected ECG device
 class WatchScreen extends StatefulWidget {
   const WatchScreen({Key? key}) : super(key: key);
 
@@ -18,43 +20,99 @@ class _WatchScreenState extends State<WatchScreen> {
   /// Prediction history
   List<Map<String, dynamic>> _history = [];
 
-  /// Is connected
+  /// Is connected to BLE device
   bool _isConnected = false;
 
   /// Sample ECG data for display
   List<double> _displayECGData = [];
+  
+  /// Bluetooth service instance
+  late BluetoothService _bluetoothService;
 
   @override
   void initState() {
     super.initState();
-    _simulateDataReception();
+    _setupBLEReception();
   }
 
-  /// Simulate receiving Bluetooth data
-  /// In real app, this would be connected to BluetoothService
-  void _simulateDataReception() {
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() => _isConnected = true);
-        _updateStatus('NORMAL', 92.5);
+  /// Setup real BLE data reception from BluetoothService
+  void _setupBLEReception() {
+    _bluetoothService = BluetoothService();
+    
+    // Listen to connection state changes
+    print('👀 [WatchScreen] Subscribing to BLE connection state...');
+    _bluetoothService.onConnectionState((state) {
+      print('📡 [WatchScreen] Connection state changed: $state');
+      setState(() {
+        _isConnected = state.toString().contains('connected');
+      });
+      if (!_isConnected) {
+        _status = 'Waiting for data...';
       }
     });
+    
+    // Listen to received data from BLE device
+    print('👂 [WatchScreen] Subscribing to BLE data stream...');
+    _bluetoothService.onDataReceived((data) {
+      print('📥 [WatchScreen] Received BLE data: "$data"');
+      _parseAndUpdateStatus(data);
+    });
+    
+    // Initial connection state
+    setState(() {
+      _isConnected = _bluetoothService.isConnected;
+    });
+    print('✅ [WatchScreen] BLE reception setup complete');
+  }
 
-    Future.delayed(const Duration(seconds: 8), () {
-      if (mounted) {
-        _updateStatus('ARRHYTHMIA', 87.3);
+  /// Parse received BLE data and update UI
+  /// Format: "NORMAL" or "ARRHYTHMIA" (optionally with confidence)
+  /// Examples: "NORMAL:99.5%", "ARRHYTHMIA:87.3%"
+  void _parseAndUpdateStatus(String data) {
+    try {
+      print('🔍 [WatchScreen] Parsing BLE data: "$data"');
+      
+      // Trim whitespace
+      String trimmedData = data.trim();
+      
+      String label = 'NORMAL';
+      double confidence = 0.0;
+      
+      if (trimmedData.contains(':')) {
+        // Format: "LABEL:CONFIDENCE"
+        List<String> parts = trimmedData.split(':');
+        label = parts[0].trim().toUpperCase();
+        
+        String confStr = parts[1].trim().replaceAll('%', '');
+        try {
+          confidence = double.parse(confStr);
+        } catch (e) {
+          print('⚠️ [WatchScreen] Could not parse confidence: ${parts[1]}');
+          confidence = 0.0;
+        }
+      } else {
+        // Format: "LABEL" only
+        label = trimmedData.toUpperCase();
+        confidence = 100.0; // Default to 100% if no confidence given
       }
-    });
-
-    Future.delayed(const Duration(seconds: 14), () {
-      if (mounted) {
-        _updateStatus('NORMAL', 94.2);
+      
+      // Validate label
+      if (label != 'NORMAL' && label != 'ARRHYTHMIA') {
+        print('⚠️ [WatchScreen] Unknown label: "$label"');
+        return;
       }
-    });
+      
+      print('✅ [WatchScreen] Parsed - Label: $label, Confidence: $confidence%');
+      _updateStatus(label, confidence);
+    } catch (e) {
+      print('❌ [WatchScreen] Error parsing data: $e');
+    }
   }
 
   /// Update status with new prediction
   void _updateStatus(String label, double confidence) {
+    print('🎨 [WatchScreen] Updating UI - Label: $label, Confidence: ${confidence.toStringAsFixed(1)}%');
+    
     setState(() {
       _status = label;
       _history.insert(
@@ -71,7 +129,7 @@ class _WatchScreenState extends State<WatchScreen> {
         _history.removeAt(_history.length - 1);
       }
 
-      // Generate sample ECG display data
+      // Generate sample ECG display data based on prediction
       _displayECGData = List.generate(100, (i) {
         double t = i / 20.0;
         return 0.5 +
@@ -79,6 +137,12 @@ class _WatchScreenState extends State<WatchScreen> {
             0.1 * sin((2 * t) % 1) * (label == 'ARRHYTHMIA' ? 2 : 1);
       });
     });
+  }
+
+  @override
+  void dispose() {
+    print('🗑️ [WatchScreen] Disposing...');
+    super.dispose();
   }
 
   @override

@@ -51,14 +51,14 @@ class TFLiteService {
       _interpreter = await Interpreter.fromAsset('assets/mamba_ecg.tflite');
       
       _isModelLoaded = true;
-      print('✅ Model loaded successfully');
+      print('Model loaded successfully');
       
       // Print model info
       _printModelInfo();
       
       return true;
     } catch (e) {
-      print('❌ Error loading model: $e');
+      print('Error loading model: $e');
       _isModelLoaded = false;
       return false;
     }

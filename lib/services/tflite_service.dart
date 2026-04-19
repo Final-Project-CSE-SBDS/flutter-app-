@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
 /// Callback for inference results
@@ -36,6 +37,8 @@ class TFLiteService {
     _onInferenceComplete = callback;
   }
 
+  static const String _modelAsset = 'assets/mamba_ecg.tflite';
+
   /// Load the TFLite model
   /// Loads the model from assets and initializes the interpreter
   Future<bool> loadModel() async {
@@ -45,22 +48,31 @@ class TFLiteService {
         return true;
       }
 
-      print('📦 Loading TFLite model...');
-      
-      // Load model from assets
-      _interpreter = await Interpreter.fromAsset('assets/mamba_ecg.tflite');
-      
+      print('Loading model...');
+      await _verifyAssetAvailable(_modelAsset);
+
+      _interpreter = await Interpreter.fromAsset(_modelAsset);
       _isModelLoaded = true;
       print('Model loaded successfully');
-      
-      // Print model info
       _printModelInfo();
-      
       return true;
-    } catch (e) {
-      print('Error loading model: $e');
+    } catch (e, st) {
+      print('❌ Error loading model from $_modelAsset: $e');
+      print('Stack trace:\n$st');
       _isModelLoaded = false;
       return false;
+    }
+  }
+
+  Future<void> _verifyAssetAvailable(String assetPath) async {
+    try {
+      final byteData = await rootBundle.load(assetPath);
+      if (byteData.lengthInBytes == 0) {
+        throw Exception('Asset $assetPath is empty (0 bytes)');
+      }
+      print('✅ Asset verified: $assetPath (${byteData.lengthInBytes} bytes)');
+    } catch (e) {
+      throw Exception('Unable to load asset $assetPath: $e');
     }
   }
 

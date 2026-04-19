@@ -1,0 +1,4 @@
+# Placeholder for app icon
+# Replace this file with your actual 1024x1024 PNG icon
+# File should be named: icon.png
+# Location: assets/icon.png

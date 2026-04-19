@@ -3,6 +3,7 @@ import '../services/tflite_service.dart';
 import '../services/ecg_streaming_service.dart';
 import '../services/bluetooth_service.dart';
 import '../services/notification_service.dart';
+import '../services/csv_service.dart';
 import 'bluetooth_screen.dart';
 import '../widgets/ecg_graph.dart';
 import '../widgets/result_card.dart';
@@ -23,6 +24,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late ECGStreamingService _streamingService;
   late BluetoothService _bluetoothService;
   late NotificationService _notificationService;
+  late CSVService _csvService;
 
   /// UI State
   bool _isModelLoading = true;
@@ -30,6 +32,11 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _showArrhythmiaAlert = false;
   String _lastPrediction = '';
   double _lastConfidence = 0.0;
+
+  /// CSV Loading State
+  bool _isLoadingCSV = false;
+  String _csvStatusMessage = '';
+  bool _hasCustomCSV = false;
 
   /// Bluetooth State
   fbp.BluetoothConnectionState _bluetoothConnectionState =
@@ -57,6 +64,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _streamingService = ECGStreamingService();
       _bluetoothService = BluetoothService();
       _notificationService = NotificationService();
+      _csvService = CSVService();
 
       print('📦 Initializing services...');
 
@@ -68,6 +76,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // Initialize ECG streaming
       await _streamingService.initialize();
+
+      // Check if custom CSV is loaded
+      setState(() {
+        _hasCustomCSV = _streamingService.hasCustomData;
+        _csvStatusMessage = _hasCustomCSV
+            ? 'Custom CSV loaded (${_streamingService.currentDataPoints} points)'
+            : 'Using sample ECG data';
+      });
 
       // Set up Bluetooth callbacks
       _bluetoothService.onConnectionState((state) {
@@ -241,6 +257,65 @@ class _HomeScreenState extends State<HomeScreen> {
       _predictionHistory.clear();
     });
     _showSnackbar('Monitoring reset');
+  }
+
+  /// Load custom CSV file
+  Future<void> _loadCustomCSV() async {
+    setState(() {
+      _isLoadingCSV = true;
+      _csvStatusMessage = 'Selecting CSV file...';
+    });
+
+    try {
+      bool success = await _streamingService.loadCustomCSV();
+
+      if (success) {
+        setState(() {
+          _hasCustomCSV = true;
+          _csvStatusMessage = 'Custom CSV loaded (${_streamingService.currentDataPoints} points)';
+        });
+        _showSnackbar('Custom CSV loaded successfully!');
+      } else {
+        setState(() {
+          _csvStatusMessage = 'Using sample ECG data';
+        });
+        _showSnackbar('No CSV file selected');
+      }
+    } catch (e) {
+      setState(() {
+        _csvStatusMessage = 'Error loading CSV: ${e.toString()}';
+      });
+      _showErrorDialog('CSV Loading Error: ${e.toString()}');
+    } finally {
+      setState(() {
+        _isLoadingCSV = false;
+      });
+    }
+  }
+
+  /// Reset to sample ECG data
+  Future<void> _resetToSampleData() async {
+    setState(() {
+      _isLoadingCSV = true;
+      _csvStatusMessage = 'Resetting to sample data...';
+    });
+
+    try {
+      await _streamingService.resetToSampleData();
+
+      setState(() {
+        _hasCustomCSV = false;
+        _csvStatusMessage = 'Using sample ECG data';
+      });
+
+      _showSnackbar('Reset to sample ECG data');
+    } catch (e) {
+      _showErrorDialog('Error resetting to sample data: ${e.toString()}');
+    } finally {
+      setState(() {
+        _isLoadingCSV = false;
+      });
+    }
   }
 
   /// Connect to Bluetooth device
@@ -475,11 +550,29 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            _streamingService.isStreaming
-                ? 'Buffer: ${_streamingService.bufferFilledPercentage}% | Inferences: $_inferenceCount${isBluetoothConnected && _connectedDevice != null ? ' | Sending to ${_connectedDevice!.name}' : ''}'
-                : 'Ready to monitor',
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          Row(
+            children: [
+              Icon(
+                _hasCustomCSV ? Icons.file_present : Icons.file_copy,
+                size: 14,
+                color: _hasCustomCSV ? Colors.green : Colors.grey,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _hasCustomCSV ? 'Custom CSV' : 'Sample Data',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _hasCustomCSV ? Colors.green : Colors.grey,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                _streamingService.isStreaming
+                    ? 'Buffer: ${_streamingService.bufferFilledPercentage}% | Inferences: $_inferenceCount${isBluetoothConnected && _connectedDevice != null ? ' | Sending to ${_connectedDevice!.name}' : ''}'
+                    : 'Ready to monitor',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
           ),
         ],
       ),
@@ -559,30 +652,103 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildControlButtons() {
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: _toggleMonitoring,
-              icon: Icon(_isMonitoring ? Icons.pause : Icons.play_arrow),
-              label: Text(_isMonitoring ? 'STOP' : 'START'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                backgroundColor:
-                    _isMonitoring ? Colors.red : Colors.green,
-              ),
+          // CSV Loading Section
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue.withOpacity(0.3)),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      _hasCustomCSV ? Icons.file_present : Icons.file_copy,
+                      color: _hasCustomCSV ? Colors.green : Colors.grey,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _csvStatusMessage,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _hasCustomCSV ? Colors.green : Colors.grey[600],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _isLoadingCSV ? null : _loadCustomCSV,
+                        icon: _isLoadingCSV
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.upload_file),
+                        label: const Text('UPLOAD CSV'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          backgroundColor: Colors.blue,
+                        ),
+                      ),
+                    ),
+                    if (_hasCustomCSV) ...[
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: _isLoadingCSV ? null : _resetToSampleData,
+                        icon: const Icon(Icons.restore),
+                        label: const Text('SAMPLE'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                          backgroundColor: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: _resetMonitoring,
-              icon: const Icon(Icons.refresh),
-              label: const Text('RESET'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
+
+          const SizedBox(height: 16),
+
+          // Monitoring Controls
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _toggleMonitoring,
+                  icon: Icon(_isMonitoring ? Icons.pause : Icons.play_arrow),
+                  label: Text(_isMonitoring ? 'STOP' : 'START'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    backgroundColor:
+                        _isMonitoring ? Colors.red : Colors.green,
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _resetMonitoring,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('RESET'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

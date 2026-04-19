@@ -2,13 +2,14 @@ import 'dart:async';
 import 'dart:math';
 import 'package:csv/csv.dart';
 import 'package:flutter/services.dart';
+import 'csv_service.dart';
 
 /// Callback for ECG data updates
 typedef ECGDataCallback = void Function(List<double> buffer, double latestValue);
 typedef InferenceReadyCallback = void Function(List<double> buffer);
 
 /// Service for streaming ECG data from CSV file
-/// Simulates real-time ECG sensor by streaming values one-by-one
+/// Supports both sample data and custom user-uploaded CSV files
 class ECGStreamingService {
   static final ECGStreamingService _instance = ECGStreamingService._internal();
 
@@ -17,6 +18,9 @@ class ECGStreamingService {
   factory ECGStreamingService() {
     return _instance;
   }
+
+  /// CSV service for file operations
+  final CSVService _csvService = CSVService();
 
   /// All ECG data loaded from CSV
   List<double> _allECGData = [];
@@ -39,6 +43,10 @@ class ECGStreamingService {
   /// Streaming active flag
   bool _isStreaming = false;
 
+  /// Data source info
+  String _dataSource = 'sample'; // 'sample' or 'custom'
+  String _fileName = '';
+
   /// Data callbacks
   ECGDataCallback? _onDataUpdate;
   InferenceReadyCallback? _onInferenceReady;
@@ -49,6 +57,77 @@ class ECGStreamingService {
   int get currentDataPoints => _allECGData.length;
   int get bufferFilledPercentage => (_buffer.length * 100 ~/ bufferSize);
   List<double> get currentBuffer => List.from(_buffer);
+  String get dataSource => _dataSource;
+  String get fileName => _fileName;
+  bool get hasCustomData => _dataSource == 'custom';
+
+  /// Load custom ECG data from user-selected CSV file
+  Future<bool> loadCustomCSV() async {
+    try {
+      print('📁 Loading custom CSV data...');
+
+      List<double> customData = await _csvService.loadCSVFromFile();
+
+      if (customData.isEmpty) {
+        print('⚠️  No data loaded from custom CSV');
+        return false;
+      }
+
+      // Validate data
+      var validation = _csvService.validateECGData(customData);
+      if (!validation['isValid']) {
+        throw Exception(validation['error']);
+      }
+
+      // Stop current streaming if active
+      if (_isStreaming) {
+        stopStreaming();
+      }
+
+      // Update data
+      _allECGData = customData;
+      _dataSource = 'custom';
+      _fileName = 'Custom CSV'; // Could be enhanced to get actual filename
+
+      // Normalize data
+      _normalizeData();
+
+      // Reset streaming state
+      _buffer.clear();
+      _currentIndex = 0;
+
+      print('✅ Custom CSV loaded: ${customData.length} points');
+      print('📊 Data range: ${validation['minValue']?.toStringAsFixed(4)} - ${validation['maxValue']?.toStringAsFixed(4)}');
+
+      return true;
+
+    } catch (e) {
+      print('❌ Error loading custom CSV: $e');
+      return false;
+    }
+  }
+
+  /// Reset to sample data
+  Future<void> resetToSampleData() async {
+    try {
+      print('🔄 Resetting to sample data...');
+
+      // Stop current streaming
+      if (_isStreaming) {
+        stopStreaming();
+      }
+
+      // Reload sample data
+      await initialize();
+
+      _dataSource = 'sample';
+      _fileName = '';
+
+      print('✅ Reset to sample data');
+    } catch (e) {
+      print('❌ Error resetting to sample data: $e');
+    }
+  }
 
   /// Initialize service (load CSV data)
   Future<void> initialize() async {

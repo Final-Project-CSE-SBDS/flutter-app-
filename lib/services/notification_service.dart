@@ -61,7 +61,7 @@ class NotificationService {
       );
 
       await _notificationsPlugin.initialize(
-        initializationSettings,
+        settings: initializationSettings,
         onDidReceiveNotificationResponse: (NotificationResponse response) {
           _log('Notification tapped: ${response.payload}');
         },
@@ -232,10 +232,10 @@ class NotificationService {
       // Show notification on both platforms
       _log('📤 Sending notification to system...');
       await _notificationsPlugin.show(
-        id,
-        title,
-        message,
-        NotificationDetails(
+        id: id,
+        title: title,
+        body: message,
+        notificationDetails: NotificationDetails(
           android: androidDetails,
           iOS: iosDetails,
         ),
@@ -273,7 +273,7 @@ class NotificationService {
   /// Cancel specific notification by ID
   Future<void> cancelNotification(int id) async {
     try {
-      await _notificationsPlugin.cancel(id);
+      await _notificationsPlugin.cancel(id: id);
       _log('Notification $id cancelled');
     } catch (e) {
       _logError('Failed to cancel notification: $e');

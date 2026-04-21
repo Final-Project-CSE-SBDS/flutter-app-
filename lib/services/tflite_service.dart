@@ -126,22 +126,77 @@ class TFLiteService {
     print('🔄 Running inference on ${usedInput.length} values...');
 
     final inputTensor = [usedInput];
-    final output = List.filled(1, 0.0).reshape([1, 1]);
+
+    // Build output container matching the model's output tensor shape
+    final outputTensors = _interpreter!.getOutputTensors();
+    if (outputTensors.isEmpty) {
+      throw Exception('Model has no output tensors');
+    }
+
+    final outShape = outputTensors[0].shape; // e.g. [1,2]
+    final outSize = outShape.reduce((a, b) => a * b);
+
+    dynamic output;
+    if (outShape.length == 1) {
+      // 1D output
+      output = List.filled(outShape[0], 0.0);
+    } else if (outShape.length == 2) {
+      output = List.generate(outShape[0], (_) => List.filled(outShape[1], 0.0));
+    } else {
+      // Fallback: flat list
+      output = List.filled(outSize, 0.0);
+    }
 
     _interpreter!.run(inputTensor, output);
 
-    final probability = output[0][0];
-    final isArrhythmia = probability > 0.5;
-    final confidence =
-        (isArrhythmia ? probability : 1 - probability) * 100;
+    // Parse output for common cases: scalar or two-class probability
+    double rawProb = 0.0;
+    bool isArrhythmia = false;
+    double confidence = 0.0;
+
+    try {
+      if (outSize == 1) {
+        // Single scalar output
+        if (outShape.length == 1) {
+          rawProb = output[0];
+        } else if (outShape.length == 2) {
+          rawProb = output[0][0];
+        } else {
+          rawProb = output[0];
+        }
+        isArrhythmia = rawProb > 0.5;
+        confidence = (isArrhythmia ? rawProb : 1.0 - rawProb) * 100.0;
+      } else if (outSize == 2 && outShape.length == 2 && outShape[0] == 1) {
+        // Two-class output: [1,2]
+        final p0 = (output[0][0] as num).toDouble();
+        final p1 = (output[0][1] as num).toDouble();
+        // choose class with higher score
+        final predicted = p1 > p0 ? 1 : 0;
+        isArrhythmia = predicted == 1;
+        rawProb = isArrhythmia ? p1 : p0;
+        confidence = rawProb * 100.0;
+      } else {
+        // Generic: take first element
+        if (outShape.length == 2) {
+          rawProb = (output[0][0] as num).toDouble();
+        } else {
+          rawProb = (output[0] as num).toDouble();
+        }
+        isArrhythmia = rawProb > 0.5;
+        confidence = (isArrhythmia ? rawProb : 1.0 - rawProb) * 100.0;
+      }
+    } catch (e) {
+      throw Exception('Failed to parse model output: $e');
+    }
 
     final result = {
       'label': isArrhythmia ? 'ARRHYTHMIA' : 'NORMAL',
       'confidence': confidence,
-      'raw': probability,
+      'rawOutput': rawProb,
+      'isArrhythmia': isArrhythmia,
     };
 
-    print('✅ Result: ${result['label']} (${confidence.toStringAsFixed(2)}%)');
+    print('✅ Result: ${result['label']} (${confidence.toStringAsFixed(2)}%) raw=$rawProb');
 
     _onInferenceComplete?.call(result);
 

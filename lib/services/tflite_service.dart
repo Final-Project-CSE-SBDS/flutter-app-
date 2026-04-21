@@ -1,46 +1,36 @@
 import 'package:flutter/services.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
-/// Callback for inference results
 typedef InferenceCallback = void Function(Map<String, dynamic> result);
 
-/// Service for TFLite model inference
-/// Handles loading the ECG classification model and running predictions
 class TFLiteService {
   static final TFLiteService _instance = TFLiteService._internal();
 
-  /// Private constructor for singleton pattern
   TFLiteService._internal();
 
-  /// Factory constructor
   factory TFLiteService() {
     return _instance;
   }
 
-  /// TFLite interpreter
   Interpreter? _interpreter;
-
-  /// Model loaded flag
   bool _isModelLoaded = false;
-
-  /// Inference callback
   InferenceCallback? _onInferenceComplete;
 
-  /// Get model loaded status
   bool get isModelLoaded => _isModelLoaded;
 
-  /// Get interpreter instance
-  Interpreter? get interpreter => _interpreter;
-
-  /// Register inference callback
   void onInferenceComplete(InferenceCallback callback) {
     _onInferenceComplete = callback;
   }
 
-  static const String _modelAsset = 'assets/mamba_ecg.tflite';
+  /// 🔥 IMPORTANT: full asset path for verification
+  static const String _assetPath = 'assets/mamba_ecg.tflite';
 
-  /// Load the TFLite model
-  /// Loads the model from assets and initializes the interpreter
+  /// 🔥 IMPORTANT: filename only for interpreter
+  static const String _modelName = 'mamba_ecg.tflite';
+
+  // Expected input length for the model
+  static const int _expectedInputLength = 187;
+
   Future<bool> loadModel() async {
     try {
       if (_interpreter != null) {
@@ -48,119 +38,120 @@ class TFLiteService {
         return true;
       }
 
-      print('Loading model...');
-      await _verifyAssetAvailable(_modelAsset);
+      print('🚀 Loading model...');
 
-      _interpreter = await Interpreter.fromAsset(_modelAsset);
-      _isModelLoaded = true;
-      print('Model loaded successfully');
-      _printModelInfo();
-      return true;
+      /// 🔥 STEP 1: Verify asset exists
+      final data = await rootBundle.load(_assetPath);
+      print('✅ Asset verified: ${data.lengthInBytes} bytes for "$_assetPath"');
+
+      // Try multiple load strategies and log fully so we can diagnose failures
+      try {
+        print('Attempting Interpreter.fromAsset with "$_modelName"');
+        _interpreter = await Interpreter.fromAsset(_modelName);
+        _isModelLoaded = true;
+        print('🎉 Model loaded successfully via fromAsset("$_modelName")');
+        _printModelInfo();
+        return true;
+      } catch (e1, st1) {
+        print('fromAsset("$_modelName") failed: $e1');
+        print(st1);
+
+        try {
+          print('Attempting Interpreter.fromAsset with "$_assetPath"');
+          _interpreter = await Interpreter.fromAsset(_assetPath);
+          _isModelLoaded = true;
+          print('🎉 Model loaded successfully via fromAsset("$_assetPath")');
+          _printModelInfo();
+          return true;
+        } catch (e2, st2) {
+          print('fromAsset("$_assetPath") failed: $e2');
+          print(st2);
+
+          // Final fallback: load raw bytes and create interpreter from buffer
+          try {
+            print('Attempting Interpreter.fromBuffer using rootBundle bytes');
+            final bytes = data.buffer.asUint8List();
+            _interpreter = Interpreter.fromBuffer(bytes);
+            _isModelLoaded = true;
+            print('🎉 Model loaded successfully via Interpreter.fromBuffer(bytes)');
+            _printModelInfo();
+            return true;
+          } catch (e3, st3) {
+            print('Interpreter.fromBuffer failed: $e3');
+            print(st3);
+            rethrow;
+          }
+        }
+      }
     } catch (e, st) {
-      print('❌ Error loading model from $_modelAsset: $e');
-      print('Stack trace:\n$st');
+      print('❌ MODEL LOAD ERROR: $e');
+      print(st);
       _isModelLoaded = false;
       return false;
     }
   }
 
-  Future<void> _verifyAssetAvailable(String assetPath) async {
-    try {
-      final byteData = await rootBundle.load(assetPath);
-      if (byteData.lengthInBytes == 0) {
-        throw Exception('Asset $assetPath is empty (0 bytes)');
-      }
-      print('✅ Asset verified: $assetPath (${byteData.lengthInBytes} bytes)');
-    } catch (e) {
-      throw Exception('Unable to load asset $assetPath: $e');
-    }
-  }
-
-  /// Print model input/output information
   void _printModelInfo() {
     if (_interpreter == null) return;
 
-    print('\n📊 Model Information:');
-    print('   Input Tensors: ${_interpreter!.getInputTensors().length}');
-    print('   Output Tensors: ${_interpreter!.getOutputTensors().length}');
+    print('\n📊 Model Info:');
 
-    for (var tensor in _interpreter!.getInputTensors()) {
-      print('   Input Shape: ${tensor.shape}');
-      print('   Input Type: ${tensor.type}');
+    for (var t in _interpreter!.getInputTensors()) {
+      print('Input Shape: ${t.shape}');
+      print('Input Type: ${t.type}');
     }
 
-    for (var tensor in _interpreter!.getOutputTensors()) {
-      print('   Output Shape: ${tensor.shape}');
-      print('   Output Type: ${tensor.type}');
+    for (var t in _interpreter!.getOutputTensors()) {
+      print('Output Shape: ${t.shape}');
+      print('Output Type: ${t.type}');
     }
   }
 
-  /// Run inference on ECG data
-  /// 
-  /// Parameters:
-  /// - input: List of 187 ECG values (normalized)
-  /// 
-  /// Returns: Classification result (0 = Normal, 1 = Arrhythmia)
   Future<Map<String, dynamic>> runInference(List<double> input) async {
-    try {
-      if (!_isModelLoaded || _interpreter == null) {
-        throw Exception('Model not loaded. Call loadModel() first.');
-      }
-
-      if (input.length != 187) {
-        throw Exception('Input length must be 187, got ${input.length}');
-      }
-
-      print('🔄 Running inference...');
-
-      // Prepare input: reshape to [1, 187]
-      final inputList = [input];
-
-      // Prepare output tensor
-      final outputShape = _interpreter!.getOutputTensors()[0].shape;
-      final outputTensor = List.filled(outputShape.reduce((a, b) => a * b), 0.0);
-
-      // Run inference
-      _interpreter!.run(inputList, [outputTensor]);
-
-      // Parse results
-      final probability = outputTensor[0];
-      final isArrhythmia = probability > 0.5;
-      final confidence = (isArrhythmia ? probability : 1.0 - probability) * 100;
-
-      print('✅ Inference complete');
-      print('   Prediction: ${isArrhythmia ? "ARRHYTHMIA ⚠️" : "NORMAL ✓"}');
-      print('   Confidence: ${confidence.toStringAsFixed(2)}%');
-
-      final result = {
-        'isArrhythmia': isArrhythmia,
-        'rawOutput': probability,
-        'confidence': confidence,
-        'label': isArrhythmia ? 'ARRHYTHMIA' : 'NORMAL',
-        'color': isArrhythmia ? 'red' : 'green',
-      };
-
-      // Call callback if registered
-      _onInferenceComplete?.call(result);
-
-      return result;
-    } catch (e) {
-      print('❌ Inference error: $e');
-      rethrow;
+    if (!_isModelLoaded || _interpreter == null) {
+      throw Exception('Model not loaded');
     }
+
+    // Ensure input length is sufficient; trim if longer than expected
+    if (input.length < _expectedInputLength) {
+      throw Exception('Input must be at least $_expectedInputLength values. Got ${input.length}');
+    }
+
+    List<double> usedInput = input;
+    if (input.length > _expectedInputLength) {
+      print('⚠️ Input length ${input.length} > $_expectedInputLength; trimming to $_expectedInputLength');
+      usedInput = input.take(_expectedInputLength).toList();
+    }
+
+    print('🔄 Running inference on ${usedInput.length} values...');
+
+    final inputTensor = [usedInput];
+    final output = List.filled(1, 0.0).reshape([1, 1]);
+
+    _interpreter!.run(inputTensor, output);
+
+    final probability = output[0][0];
+    final isArrhythmia = probability > 0.5;
+    final confidence =
+        (isArrhythmia ? probability : 1 - probability) * 100;
+
+    final result = {
+      'label': isArrhythmia ? 'ARRHYTHMIA' : 'NORMAL',
+      'confidence': confidence,
+      'raw': probability,
+    };
+
+    print('✅ Result: ${result['label']} (${confidence.toStringAsFixed(2)}%)');
+
+    _onInferenceComplete?.call(result);
+
+    return result;
   }
 
-  /// Close the interpreter and free resources
   Future<void> close() async {
-    try {
-      if (_interpreter != null) {
-        _interpreter!.close();
-        _interpreter = null;
-        _isModelLoaded = false;
-        print('🔌 Model closed');
-      }
-    } catch (e) {
-      print('❌ Error closing model: $e');
-    }
+    _interpreter?.close();
+    _interpreter = null;
+    _isModelLoaded = false;
+    print('🔌 Model closed');
   }
 }

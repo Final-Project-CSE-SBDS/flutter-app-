@@ -96,6 +96,20 @@ class ECGStreamingService {
       _buffer.clear();
       _currentIndex = 0;
 
+      // Prefill buffer with first window so UI/inference can run immediately
+      final prefillLength = _allECGData.length >= bufferSize ? bufferSize : _allECGData.length;
+      if (prefillLength > 0) {
+        _buffer = _allECGData.sublist(0, prefillLength).toList();
+        // Notify UI about data and latest value
+        _onDataUpdate?.call(List.from(_buffer), _buffer.isNotEmpty ? _buffer.last : 0.0);
+
+        // If buffer is full, immediately notify inference ready
+        if (_buffer.length == bufferSize && _onInferenceReady != null) {
+          print('🔔 Buffer prefilled with $prefillLength points; triggering inference callback');
+          _onInferenceReady!.call(List.from(_buffer));
+        }
+      }
+
       print('✅ Custom CSV loaded: ${customData.length} points');
       print('📊 Data range: ${validation['minValue']?.toStringAsFixed(4)} - ${validation['maxValue']?.toStringAsFixed(4)}');
 

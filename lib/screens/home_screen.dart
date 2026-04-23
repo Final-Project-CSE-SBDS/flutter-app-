@@ -9,7 +9,9 @@ import '../widgets/ecg_graph.dart';
 import '../widgets/result_card.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 
-import 'package:permission_handler/permission_handler.dart';
+/// Home Screen - Real-time ECG Monitoring
+/// Main monitoring interface with live ECG graph and predictions
+class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
 
   @override
@@ -41,15 +43,13 @@ class _HomeScreenState extends State<HomeScreen> {
       fbp.BluetoothConnectionState.disconnected;
   fbp.BluetoothDevice? _connectedDevice;
   
-  
-  /// BLE Scan State
-  bool _isScanningDevices = false;
-  List<Map<String, dynamic>> _scannedDevices = [];
-  
   /// ECG Data
   List<double> _ecgBuffer = [];
   List<double> _displayData = [];
   int _inferenceCount = 0;
+
+  /// Inference History
+  List<Map<String, dynamic>> _predictionHistory = [];
 
   @override
   void initState() {
@@ -318,106 +318,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Check and request BLE permissions
-  Future<bool> _checkBlePermissions() async {
-    try {
-      // Check Bluetooth scan permission
-      var scanStatus = await Permission.bluetoothScan.status;
-      if (!scanStatus.isGranted) {
-        scanStatus = await Permission.bluetoothScan.request();
-        if (!scanStatus.isGranted) {
-          _showErrorDialog('Bluetooth scan permission denied');
-          return false;
-        }
-      }
-      
-      // Check Bluetooth connect permission
-      var connectStatus = await Permission.bluetoothConnect.status;
-      if (!connectStatus.isGranted) {
-        connectStatus = await Permission.bluetoothConnect.request();
-        if (!connectStatus.isGranted) {
-          _showErrorDialog('Bluetooth connect permission denied');
-          return false;
-        }
-      }
-      
-      // Check location permission (required for BLE scanning)
-      var locationStatus = await Permission.location.status;
-      if (!locationStatus.isGranted) {
-        locationStatus = await Permission.location.request();
-        if (!locationStatus.isGranted) {
-          _showErrorDialog('Location permission denied. Required for BLE scanning.');
-          return false;
-        }
-      }
-      
-      return true;
-    } catch (e) {
-      _showErrorDialog('Error checking permissions: ');
-      return false;
-    }
-  }
-  
-  /// Check if Bluetooth is enabled
-  Future<bool> _checkBluetoothEnabled() async {
-    try {
-      bool isOn = await fbp.FlutterBluePlus.adapterState.first == fbp.BluetoothAdapterState.on;
-      if (!isOn) {
-        _showErrorDialog('Bluetooth is turned off. Please enable Bluetooth to scan devices.');
-        return false;
-      }
-      return true;
-    } catch (e) {
-      _showErrorDialog('Error checking Bluetooth: ');
-      return false;
-    }
-  }
-  
-  /// Start scanning for BLE devices
-  Future<void> _startBleScan() async {
-    // Check permissions
-    if (!await _checkBlePermissions()) return;
-    
-    // Check Bluetooth
-    if (!await _checkBluetoothEnabled()) return;
-    
-    setState(() {
-      _isScanningDevices = true;
-      _scannedDevices.clear();
-    });
-    
-    print('?? Scan started');
-    
-    // Set up device found callback
-    _bluetoothService.onDeviceFound((device, rssi) {
-      if (mounted) {
-        setState(() {
-          // Check if device already exists
-          bool exists = _scannedDevices.any((d) => d['id'] == device.id);
-          if (!exists) {
-            _scannedDevices.add({
-              'name': device.name.isEmpty ? 'Unknown Device' : device.name,
-              'id': device.id,
-              'rssi': rssi,
-            });
-            print('?? Device found:  (ID: , RSSI: )');
-          }
-        });
-      }
-    });
-    
-    try {
-      await _bluetoothService.startScan(timeout: const Duration(seconds: 5));
-    } catch (e) {
-      print('? Scan error: ');
-      _showErrorDialog('Scan failed: ');
-    } finally {
-      setState(() => _isScanningDevices = false);
-      print('?? Scan stopped');
-    }
-  }
-  
-  /// Connect to Bluetooth device
   /// Connect to Bluetooth device
   void _connectBluetooth() {
     if (!mounted) return;

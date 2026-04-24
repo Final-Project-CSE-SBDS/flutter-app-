@@ -203,33 +203,59 @@ class BluetoothService {
     try {
       if (!Platform.isAndroid) return true;
 
-      // Android 12+ requires fine-grained Bluetooth permissions
-      final permissionsToRequest = <Permission>[];
+      // Request runtime permissions required for BLE scanning
+      final toRequest = <Permission>[];
+      // Bluetooth runtime permissions (Android 12+)
+      toRequest.add(Permission.bluetoothScan);
+      toRequest.add(Permission.bluetoothConnect);
+      // Location permission (required for BLE scan on older Android versions)
+      toRequest.add(Permission.location);
 
-      // Bluetooth scan/connect/advertise (API 31+)
-      if (Permission.bluetoothScan != null) permissionsToRequest.add(Permission.bluetoothScan);
-      if (Permission.bluetoothConnect != null) permissionsToRequest.add(Permission.bluetoothConnect);
-      if (Permission.bluetoothAdvertise != null) permissionsToRequest.add(Permission.bluetoothAdvertise);
+      _log('Requesting permissions: ${toRequest.map((p) => p.toString()).join(', ')}');
+      final statuses = await toRequest.request();
 
-      // Location permission (required on older Android versions for BLE scanning)
-      permissionsToRequest.add(Permission.locationWhenInUse);
+      // Log statuses
+      statuses.forEach((perm, status) {
+        _log('Permission status: $perm => $status');
+      });
 
-      // Request all permissions together
-      final statuses = await permissionsToRequest.request();
-
-      // Check results
-      for (var entry in statuses.entries) {
-        final status = entry.value;
-        if (status.isDenied) {
-          _logError('Permission denied: ${entry.key}');
-          return false;
+      // Check individual permissions
+      if (!(await Permission.bluetoothScan.isGranted)) {
+        _logError('Permission bluetoothScan not granted');
+        if (await Permission.bluetoothScan.isPermanentlyDenied) {
+          _logError('bluetoothScan permanently denied - opening app settings');
+          await openAppSettings();
         }
-        if (status.isPermanentlyDenied) {
-          _logError('Permission permanently denied: ${entry.key}');
-          return false;
-        }
+        return false;
       }
 
+      if (!(await Permission.bluetoothConnect.isGranted)) {
+        _logError('Permission bluetoothConnect not granted');
+        if (await Permission.bluetoothConnect.isPermanentlyDenied) {
+          _logError('bluetoothConnect permanently denied - opening app settings');
+          await openAppSettings();
+        }
+        return false;
+      }
+
+      if (!(await Permission.location.isGranted)) {
+        _logError('Permission location not granted');
+        if (await Permission.location.isPermanentlyDenied) {
+          _logError('location permanently denied - opening app settings');
+          await openAppSettings();
+        }
+        return false;
+      }
+
+      // Ensure location services are enabled
+      final serviceStatus = await Permission.location.serviceStatus;
+      _log('Location service status: $serviceStatus');
+      if (serviceStatus != ServiceStatus.enabled) {
+        _logError('Location services are disabled - please enable location services');
+        return false;
+      }
+
+      _log('All required permissions granted and location enabled');
       return true;
     } catch (e) {
       _logError('Permission check error: $e');
@@ -571,3 +597,7 @@ class BluetoothService {
     }
   }
 }
+
+
+
+

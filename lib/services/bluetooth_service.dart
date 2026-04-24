@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 
 /// Callbacks for Bluetooth events
@@ -133,6 +135,15 @@ class BluetoothService {
       }
 
       _log('🔍 Starting BLE scan...');
+      _log('Scan started');
+
+      // Ensure necessary permissions on Android before starting
+      bool permissionsGranted = await _ensurePermissions();
+      if (!permissionsGranted) {
+        _logError('Required permissions not granted - aborting scan');
+        _isScanning = false;
+        throw Exception('Required permissions not granted');
+      }
       _isScanning = true;
 
       // Cancel previous subscription
@@ -147,7 +158,7 @@ class BluetoothService {
             final name = device.name.isEmpty ? '(Unknown)' : device.name;
 
             // Print ALL devices found (no RSSI filtering)
-            _log('📱 Found device: $name (ID: ${device.id}, RSSI: $rssi dBm)');
+            _log('Device found: $name (ID: ${device.id}, RSSI: $rssi dBm)');
             _onDeviceFound?.call(device, rssi);
           }
         },
@@ -181,9 +192,48 @@ class BluetoothService {
 
       await fbp.FlutterBluePlus.stopScan();
       _isScanning = false;
-      _log('⏹️  Scan stopped');
+      _log('Scan stopped');
     } catch (e) {
       _logError('Error stopping scan: $e');
+    }
+  }
+
+  /// Ensure Android permissions (Bluetooth + Location) required for scanning
+  Future<bool> _ensurePermissions() async {
+    try {
+      if (!Platform.isAndroid) return true;
+
+      // Android 12+ requires fine-grained Bluetooth permissions
+      final permissionsToRequest = <Permission>[];
+
+      // Bluetooth scan/connect/advertise (API 31+)
+      if (Permission.bluetoothScan != null) permissionsToRequest.add(Permission.bluetoothScan);
+      if (Permission.bluetoothConnect != null) permissionsToRequest.add(Permission.bluetoothConnect);
+      if (Permission.bluetoothAdvertise != null) permissionsToRequest.add(Permission.bluetoothAdvertise);
+
+      // Location permission (required on older Android versions for BLE scanning)
+      permissionsToRequest.add(Permission.locationWhenInUse);
+
+      // Request all permissions together
+      final statuses = await permissionsToRequest.request();
+
+      // Check results
+      for (var entry in statuses.entries) {
+        final status = entry.value;
+        if (status.isDenied) {
+          _logError('Permission denied: ${entry.key}');
+          return false;
+        }
+        if (status.isPermanentlyDenied) {
+          _logError('Permission permanently denied: ${entry.key}');
+          return false;
+        }
+      }
+
+      return true;
+    } catch (e) {
+      _logError('Permission check error: $e');
+      return false;
     }
   }
 

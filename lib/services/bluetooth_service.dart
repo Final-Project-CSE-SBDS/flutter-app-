@@ -171,7 +171,6 @@ class BluetoothService {
       await fbp.FlutterBluePlus.startScan(
         timeout: timeout,
         androidUsesFineLocation: true,
-        allowDuplicates: true,
       );
 
       // Auto-stop after timeout

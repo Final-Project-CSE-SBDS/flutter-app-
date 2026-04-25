@@ -135,11 +135,11 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
       }
 
       _addLog('Bluetooth is ON');
-      _addLog('Starting BLE scan with RSSI filtering...');
+      _addLog('Starting BLE scan (no filtering)...');
 
-      // Start scan
+      // Start scan (8s)
       await widget.bluetoothService.startScan(
-        timeout: const Duration(seconds: 10),
+        timeout: const Duration(seconds: 8),
       );
 
       setState(() {

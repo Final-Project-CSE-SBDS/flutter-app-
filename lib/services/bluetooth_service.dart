@@ -53,7 +53,7 @@ class BluetoothService {
   static const int rssiThreshold = -90;
   
   /// Timeout durations
-  static const Duration scanTimeout = Duration(seconds: 10);
+  static const Duration scanTimeout = Duration(seconds: 8);
   static const Duration connectionTimeout = Duration(seconds: 15);
   static const Duration discoveryTimeout = Duration(seconds: 5);
 
@@ -167,9 +167,11 @@ class BluetoothService {
         },
       );
 
-      // Start actual scan
+      // Start actual scan (no filtering) - request fine location on Android
       await fbp.FlutterBluePlus.startScan(
         timeout: timeout,
+        androidUsesFineLocation: true,
+        allowDuplicates: true,
       );
 
       // Auto-stop after timeout

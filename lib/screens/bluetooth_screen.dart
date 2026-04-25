@@ -43,9 +43,10 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
     // Device found callback with RSSI
     widget.bluetoothService.onDeviceFound((device, rssi) {
       setState(() {
-        String deviceId = device.id.toString();
-        String signal = _getRssiSignal(rssi);
-        
+        final String deviceId = device.id.toString();
+        final String name = device.name.isNotEmpty ? device.name : 'Unknown Device';
+        final String signal = _getRssiSignal(rssi);
+
         _discoveredDevices[deviceId] = {
           'device': device,
           'rssi': rssi,
@@ -53,10 +54,10 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
           'timestamp': DateTime.now(),
         };
 
-        // Update discovery log
-        String message = signal + device.name.padRight(15) + 
-                        ' (RSSI: ${rssi.toString().padLeft(4)} dBm)';
+        // Update discovery log with total count
+        String message = 'Found: $name (ID: $deviceId) RSSI: ${rssi} dBm';
         _addLog(message);
+        _addLog('Total devices: ${_discoveredDevices.length}');
       });
     });
 
@@ -336,14 +337,29 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
 
               // Scan Controls
               if (!isConnected) ...[
-                ElevatedButton.icon(
-                  onPressed: _isScanning ? _stopScan : _startScan,
-                  icon: Icon(_isScanning ? Icons.stop : Icons.search),
-                  label: Text(_isScanning ? 'Scanning...' : 'Scan Devices'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    backgroundColor: Colors.blue,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _isScanning ? _stopScan : _startScan,
+                        icon: Icon(_isScanning ? Icons.stop : Icons.search),
+                        label: Text(_isScanning ? 'Scanning...' : 'Scan Devices'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          backgroundColor: Colors.blue,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Live device count badge
+                    Chip(
+                      label: Text(
+                        '${_discoveredDevices.length}',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      backgroundColor: Colors.blue,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 24),
 

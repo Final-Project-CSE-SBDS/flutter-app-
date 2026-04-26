@@ -26,7 +26,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late NotificationService _notificationService;
   late CSVService _csvService;
 
-  /// UI State
+
   bool _isModelLoading = true;
   bool _isMonitoring = false;
   bool _showArrhythmiaAlert = false;
@@ -77,7 +77,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // Initialize ECG streaming
       await _streamingService.initialize();
 
-      // Check if custom CSV is loaded
+  
       setState(() {
         _hasCustomCSV = _streamingService.hasCustomData;
         _csvStatusMessage = _hasCustomCSV

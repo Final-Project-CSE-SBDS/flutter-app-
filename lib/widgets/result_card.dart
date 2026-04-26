@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Widget to display ECG classification results
-/// Shows prediction status, confidence, and visual indicator
 class ResultCard extends StatelessWidget {
   /// Prediction label (NORMAL or ARRHYTHMIA)
   final String label;

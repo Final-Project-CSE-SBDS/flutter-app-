@@ -292,7 +292,7 @@ class ECGStreamingService {
     print('🔄 ECG stream reset');
   }
 
-  /// Get a sample of ECG data
+  /// sample of ECG data
   List<double> getSampleECGData(int length) {
     if (_allECGData.isEmpty) {
       return [];
@@ -301,12 +301,10 @@ class ECGStreamingService {
     return _allECGData.sublist(0, length);
   }
 
-  /// Get all loaded ECG data
   List<double> getAllECGData() {
     return List.from(_allECGData);
   }
 
-  /// Dispose resources
   void dispose() {
     stopStreaming();
     print('🔌 ECG Streaming Service disposed');

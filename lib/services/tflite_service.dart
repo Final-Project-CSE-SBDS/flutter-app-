@@ -67,7 +67,7 @@ class TFLiteService {
           print('fromAsset("$_assetPath") failed: $e2');
           print(st2);
 
-          // Final fallback: load raw bytes and create interpreter from buffer
+  
           try {
             print('Attempting Interpreter.fromBuffer using rootBundle bytes');
             final bytes = data.buffer.asUint8List();
@@ -112,7 +112,6 @@ class TFLiteService {
       throw Exception('Model not loaded');
     }
 
-    // Ensure input length is sufficient; trim if longer than expected
     if (input.length < _expectedInputLength) {
       throw Exception('Input must be at least $_expectedInputLength values. Got ${input.length}');
     }
@@ -143,13 +142,13 @@ class TFLiteService {
     } else if (outShape.length == 2) {
       output = List.generate(outShape[0], (_) => List.filled(outShape[1], 0.0));
     } else {
-      // Fallback: flat list
+     
       output = List.filled(outSize, 0.0);
     }
 
     _interpreter!.run(inputTensor, output);
 
-    // Parse output for common cases: scalar or two-class probability
+   
     double rawProb = 0.0;
     bool isArrhythmia = false;
     double confidence = 0.0;

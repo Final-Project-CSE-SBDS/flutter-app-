@@ -22,13 +22,12 @@ class TFLiteService {
     _onInferenceComplete = callback;
   }
 
-  /// 🔥 IMPORTANT: full asset path for verification
+  
   static const String _assetPath = 'assets/mamba_ecg.tflite';
 
-  /// 🔥 IMPORTANT: filename only for interpreter
+
   static const String _modelName = 'mamba_ecg.tflite';
 
-  // Expected input length for the model
   static const int _expectedInputLength = 187;
 
   Future<bool> loadModel() async {

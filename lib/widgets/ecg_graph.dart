@@ -1,22 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 
-/// ECG Live Graph Widget
-/// Displays real-time ECG waveform using line chart
 class ECGGraphWidget extends StatefulWidget {
-  /// ECG data points to display
+  
   final List<double> ecgData;
 
-  /// Show grid
   final bool showGrid;
 
-  /// Line color
+  
   final Color lineColor;
 
-  /// Background color
   final Color backgroundColor;
 
-  /// Spot radius
   final double spotRadius;
 
   const ECGGraphWidget({
@@ -59,7 +54,7 @@ class _ECGGraphWidgetState extends State<ECGGraphWidget> {
       color: widget.backgroundColor,
       child: LineChart(
         LineChartData(
-          // Grid configuration
+         
           gridData: FlGridData(
             show: widget.showGrid,
             drawVerticalLine: true,
@@ -80,7 +75,6 @@ class _ECGGraphWidgetState extends State<ECGGraphWidget> {
             },
           ),
 
-          // Titles
           titlesData: FlTitlesData(
             show: true,
             rightTitles: const AxisTitles(
@@ -130,13 +124,12 @@ class _ECGGraphWidgetState extends State<ECGGraphWidget> {
             ),
           ),
 
-          // Min/Max values
           minX: 0,
           maxX: (spots.length - 1).toDouble(),
           minY: 0,
           maxY: 1.0,
 
-          // Line data
+      
           lineBarsData: [
             LineChartBarData(
               spots: spots,
@@ -154,7 +147,6 @@ class _ECGGraphWidgetState extends State<ECGGraphWidget> {
             ),
           ],
 
-          // Touch interaction
           lineTouchData: LineTouchData(
             enabled: true,
             touchTooltipData: LineTouchTooltipData(
@@ -180,7 +172,6 @@ class _ECGGraphWidgetState extends State<ECGGraphWidget> {
   }
 }
 
-/// Minimal ECG Graph - optimized for watch display
 class MinimalECGGraph extends StatelessWidget {
   final List<double> ecgData;
   final Color lineColor;

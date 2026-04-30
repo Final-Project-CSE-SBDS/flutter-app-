@@ -506,7 +506,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const Spacer(),
-              // Bluetooth Status Badge
+
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -579,7 +579,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Build monitoring stats
   Widget _buildMonitoringStats() {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -613,7 +612,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Build individual stat card
   Widget _buildStatCard({
     required String title,
     required String value,
@@ -648,7 +646,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Build control buttons
   Widget _buildControlButtons() {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -722,7 +719,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
           const SizedBox(height: 16),
 
-          // Monitoring Controls
           Row(
             children: [
               Expanded(
@@ -801,7 +797,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Format time
   String _formatTime(DateTime time) {
     return '${time.hour}:${time.minute.toString().padLeft(2, '0')}:${time.second.toString().padLeft(2, '0')}';
   }

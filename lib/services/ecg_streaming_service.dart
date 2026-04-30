@@ -263,28 +263,22 @@ class ECGStreamingService {
       print('🔄 ECG data looped');
     }
 
-    // Get next value
     double nextValue = _allECGData[_currentIndex];
     _currentIndex++;
 
-    // Add to buffer
     _buffer.add(nextValue);
 
-    // Keep buffer at fixed size
     if (_buffer.length > bufferSize) {
       _buffer.removeAt(0);
     }
 
-    // Notify data update
     _onDataUpdate?.call(List.from(_buffer), nextValue);
 
-    // If buffer is full, notify inference ready
     if (_buffer.length == bufferSize && _onInferenceReady != null) {
       _onInferenceReady!.call(List.from(_buffer));
     }
   }
 
-  /// Reset streaming
   void reset() {
     stopStreaming();
     _buffer.clear();
@@ -292,7 +286,6 @@ class ECGStreamingService {
     print('🔄 ECG stream reset');
   }
 
-  /// sample of ECG data
   List<double> getSampleECGData(int length) {
     if (_allECGData.isEmpty) {
       return [];

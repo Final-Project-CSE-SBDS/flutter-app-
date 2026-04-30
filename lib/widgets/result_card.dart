@@ -1,19 +1,14 @@
 import 'package:flutter/material.dart';
 
 class ResultCard extends StatelessWidget {
-  /// Prediction label (NORMAL or ARRHYTHMIA)
   final String label;
 
-  /// Raw model output probability
   final double rawOutput;
 
-  /// Confidence percentage
   final double confidence;
 
-  /// Whether prediction is arrhythmia
   final bool isArrhythmia;
 
-  /// Optional callback when user acknowledges result
   final VoidCallback? onAcknowledge;
 
   const ResultCard({
@@ -27,7 +22,7 @@ class ResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Determine colors based on prediction
+ 
     final backgroundColor = isArrhythmia
         ? const Color(0xFFFFEBEE) // Light red for arrhythmia
         : const Color(0xFFE8F5E9); // Light green for normal

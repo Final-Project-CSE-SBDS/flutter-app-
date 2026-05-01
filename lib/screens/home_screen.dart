@@ -394,125 +394,9 @@ class _HomeScreenState extends State<HomeScreen> {
               )
             : CustomScrollView(
                 slivers: [
-                  // Stunning App Bar with Logo
-                  SliverAppBar(
-                    expandedHeight: 180,
-                    floating: false,
-                    pinned: true,
-                    stretch: true,
-                    backgroundColor: Colors.indigo.shade600,
-                    leading: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.favorite,
-                          color: Colors.white,
-                          size: 28,
-                        ),
-                      ),
-                    ),
-                    flexibleSpace: FlexibleSpaceBar(
-                      centerTitle: true,
-                      title: const Text(
-                        'ECG Monitoring System',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      background: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Colors.indigo.shade700,
-                              Colors.indigo.shade500,
-                              Colors.purple.shade400,
-                            ],
-                          ),
-                        ),
-                        child: Stack(
-                          children: [
-                            // Background Pattern
-                            Positioned.fill(
-                              child: CustomPaint(
-                                painter: _ECGPatternPainter(),
-                              ),
-                            ),
-                            // Logo and Title
-                            Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  // Logo Container
-                                  Container(
-                                    width: 70,
-                                    height: 70,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.15),
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: Colors.white.withOpacity(0.3),
-                                        width: 2,
-                                      ),
-                                    ),
-                                    child: const Icon(
-                                      Icons.monitor_heart,
-                                      color: Colors.white,
-                                      size: 36,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 60),
-                                ],
-                              ),
-                            ),
-                            // Decorative circles
-                            Positioned(
-                              top: 40,
-                              right: 30,
-                              child: Container(
-                                width: 60,
-                                height: 60,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white.withOpacity(0.1),
-                                    width: 2,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              top: 60,
-                              right: 50,
-                              child: Container(
-                                width: 30,
-                                height: 30,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white.withOpacity(0.1),
-                                    width: 1,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    actions: [
-                      // Connection Status Badge
-                      _buildConnectionBadge(),
-                      const SizedBox(width: 8),
-                    ],
+                  // Perfect Responsive Header
+                  SliverToBoxAdapter(
+                    child: _buildPerfectHeader(),
                   ),
 
                   SliverToBoxAdapter(
@@ -585,6 +469,190 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Build Perfect Responsive Header
+  Widget _buildPerfectHeader() {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.indigo.shade800,
+            Colors.indigo.shade600,
+            Colors.purple.shade600,
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.indigo.withOpacity(0.4),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            const SizedBox(height: 20),
+
+            // Logo - Perfect Centered with local image
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.15),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.4),
+                  width: 3,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 30,
+                    spreadRadius: 5,
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(50),
+                child: Image.asset(
+                  'assets/icon.png',
+                  width: 100,
+                  height: 100,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    // Fallback to icon if image fails
+                    return const Icon(
+                      Icons.monitor_heart,
+                      color: Colors.white,
+                      size: 52,
+                    );
+                  },
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // Title - Perfect Centered
+            const Text(
+              'ECG monitor',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                letterSpacing: 1.0,
+                height: 1.2,
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Status Row - Perfect Centered with Bluetooth
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 30),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Monitoring Status
+                  Expanded(
+                    child: _buildStatusPill(
+                      icon: _isMonitoring ? Icons.favorite : Icons.favorite_border,
+                      label: _isMonitoring ? 'Monitoring' : 'Standby',
+                      color: _isMonitoring ? Colors.greenAccent : Colors.orangeAccent,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  // Bluetooth Status - Tappable
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: _connectBluetooth,
+                      child: _buildStatusPill(
+                        icon: _bluetoothConnectionState == fbp.BluetoothConnectionState.connected
+                            ? Icons.bluetooth_connected
+                            : Icons.bluetooth,
+                        label: _bluetoothConnectionState == fbp.BluetoothConnectionState.connected
+                            ? 'Connected'
+                            : 'Tap to Connect',
+                        color: _bluetoothConnectionState == fbp.BluetoothConnectionState.connected
+                            ? Colors.cyanAccent
+                            : Colors.grey,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 30),
+
+            // Bottom decorative line
+            Container(
+              width: 60,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Bottom Curve
+            Container(
+              height: 35,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(30),
+                  topRight: Radius.circular(30),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build status pill
+  Widget _buildStatusPill({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(25),
+        border: Border.all(
+          color: color.withOpacity(0.4),
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }

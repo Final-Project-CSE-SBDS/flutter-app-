@@ -394,11 +394,19 @@ class _HomeScreenState extends State<HomeScreen> {
               )
             : CustomScrollView(
                 slivers: [
-                  // Perfect Responsive Header
-                  SliverToBoxAdapter(
-                    child: _buildPerfectHeader(),
+                  // Pinned Header - Visible on scroll
+                  SliverAppBar(
+                    expandedHeight: 220,
+                    floating: false,
+                    pinned: true,
+                    stretch: true,
+                    backgroundColor: Colors.indigo.shade700,
+                    flexibleSpace: FlexibleSpaceBar(
+                      background: _buildPerfectHeader(),
+                    ),
                   ),
 
+                  // Content below pinned header
                   SliverToBoxAdapter(
                     child: Column(
                       children: [
@@ -520,13 +528,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(50),
+              child: ClipOval(
                 child: Image.asset(
                   'assets/icon.png',
+                  fit: BoxFit.cover,
                   width: 100,
                   height: 100,
-                  fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) {
                     // Fallback to icon if image fails
                     return const Icon(

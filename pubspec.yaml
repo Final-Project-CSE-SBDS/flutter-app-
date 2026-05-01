@@ -50,6 +50,7 @@ flutter:
   assets:
     - assets/mamba_ecg.tflite
     - assets/sample_ecg.csv
+    - assets/icon.png
 
 flutter_icons:
   android: true

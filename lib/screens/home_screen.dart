@@ -9,8 +9,6 @@ import '../widgets/ecg_graph.dart';
 import '../widgets/result_card.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 
-/// Home Screen - Real-time ECG Monitoring
-/// Main monitoring interface with live ECG graph and predictions
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
 
@@ -82,7 +80,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _hasCustomCSV = _streamingService.hasCustomData;
         _csvStatusMessage = _hasCustomCSV
             ? 'Custom CSV loaded (${_streamingService.currentDataPoints} points)'
-            : 'Using sample ECG data';
+            : 'Using pre-recorded ECG data';
       });
 
       // Set up Bluetooth callbacks
@@ -373,7 +371,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('💓 Real-Time ECG Monitor'),
+        title: const Text('ECG Monitoring & Analysis System'),
         centerTitle: true,
         actions: [
           IconButton(
@@ -407,7 +405,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Live ECG Waveform',
+                          'ECG Waveform Visualization',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -559,7 +557,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(width: 4),
               Text(
-                _hasCustomCSV ? 'Custom CSV' : 'Sample Data',
+                _hasCustomCSV ? 'Custom CSV' : 'ECG Data',
                 style: TextStyle(
                   fontSize: 12,
                   color: _hasCustomCSV ? Colors.green : Colors.grey,
@@ -569,7 +567,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Text(
                 _streamingService.isStreaming
                     ? 'Buffer: ${_streamingService.bufferFilledPercentage}% | Inferences: $_inferenceCount${isBluetoothConnected && _connectedDevice != null ? ' | Sending to ${_connectedDevice!.name}' : ''}'
-                    : 'Ready to monitor',
+                    : 'Ready to analyze ECG data',
                 style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
             ],

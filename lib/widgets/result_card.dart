@@ -19,26 +19,19 @@ class ResultCard extends StatelessWidget {
     required this.isArrhythmia,
     this.onAcknowledge,
   }) : super(key: key);
-
   @override
   Widget build(BuildContext context) {
- 
     final backgroundColor = isArrhythmia
         ? const Color(0xFFFFEBEE) // Light red for arrhythmia
         : const Color(0xFFE8F5E9); // Light green for normal
-
     final borderColor =
         isArrhythmia ? const Color(0xFFC62828) : const Color(0xFF2E7D32);
-
     final textColor =
         isArrhythmia ? const Color(0xFFC62828) : const Color(0xFF1B5E20);
-
     final icon =
         isArrhythmia ? Icons.warning_rounded : Icons.favorite_rounded;
-
     final iconColor =
         isArrhythmia ? const Color(0xFFC62828) : const Color(0xFF2E7D32);
-
     return Card(
       elevation: 8,
       shape: RoundedRectangleBorder(
@@ -52,7 +45,7 @@ class ResultCard extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            /// Icon indicator
+
             Container(
               width: 80,
               height: 80,
@@ -68,7 +61,6 @@ class ResultCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            /// Prediction label
             Text(
               label,
               style: TextStyle(
@@ -80,7 +72,6 @@ class ResultCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            /// Health status message
             Text(
               isArrhythmia
                   ? 'Abnormal heartbeat detected'
@@ -93,7 +84,6 @@ class ResultCard extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            /// Confidence meter
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

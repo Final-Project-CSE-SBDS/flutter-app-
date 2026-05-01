@@ -11,23 +11,16 @@ class TFLiteService {
   factory TFLiteService() {
     return _instance;
   }
-
   Interpreter? _interpreter;
   bool _isModelLoaded = false;
   InferenceCallback? _onInferenceComplete;
-
   bool get isModelLoaded => _isModelLoaded;
-
   void onInferenceComplete(InferenceCallback callback) {
     _onInferenceComplete = callback;
   }
 
-  
   static const String _assetPath = 'assets/mamba_ecg.tflite';
-
-
   static const String _modelName = 'mamba_ecg.tflite';
-
   static const int _expectedInputLength = 187;
 
   Future<bool> loadModel() async {

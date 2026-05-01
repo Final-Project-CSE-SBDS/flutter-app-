@@ -370,231 +370,556 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('ECG Monitoring & Analysis System'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.bluetooth),
-            onPressed: _connectBluetooth,
-            tooltip: 'Connect Bluetooth',
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Theme.of(context).primaryColor.withOpacity(0.1),
+              Colors.white,
+            ],
           ),
-        ],
-      ),
-      body: _isModelLoading
-          ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Initializing ECG System...'),
-                ],
-              ),
-            )
-          : SingleChildScrollView(
-              child: Column(
-                children: [
-                  // Status Banner
-                  _buildStatusBanner(),
-
-                  // ECG Graph
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'ECG Waveform Visualization',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+        ),
+        child: _isModelLoading
+            ? const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Initializing ECG System...'),
+                  ],
+                ),
+              )
+            : CustomScrollView(
+                slivers: [
+                  // Stunning App Bar with Logo
+                  SliverAppBar(
+                    expandedHeight: 180,
+                    floating: false,
+                    pinned: true,
+                    stretch: true,
+                    backgroundColor: Colors.indigo.shade600,
+                    leading: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.favorite,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ),
+                    ),
+                    flexibleSpace: FlexibleSpaceBar(
+                      centerTitle: true,
+                      title: const Text(
+                        'ECG Monitoring System',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      background: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Colors.indigo.shade700,
+                              Colors.indigo.shade500,
+                              Colors.purple.shade400,
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Container(
-                          height: 250,
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey),
-                            borderRadius: BorderRadius.circular(8),
-                            color: Colors.white,
-                          ),
-                          child: ECGGraphWidget(
-                            ecgData: _displayData,
-                            lineColor: _showArrhythmiaAlert
-                                ? Colors.red
-                                : Colors.blue,
+                        child: Stack(
+                          children: [
+                            // Background Pattern
+                            Positioned.fill(
+                              child: CustomPaint(
+                                painter: _ECGPatternPainter(),
+                              ),
+                            ),
+                            // Logo and Title
+                            Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  // Logo Container
+                                  Container(
+                                    width: 70,
+                                    height: 70,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.15),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white.withOpacity(0.3),
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: const Icon(
+                                      Icons.monitor_heart,
+                                      color: Colors.white,
+                                      size: 36,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 60),
+                                ],
+                              ),
+                            ),
+                            // Decorative circles
+                            Positioned(
+                              top: 40,
+                              right: 30,
+                              child: Container(
+                                width: 60,
+                                height: 60,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.1),
+                                    width: 2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              top: 60,
+                              right: 50,
+                              child: Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.1),
+                                    width: 1,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    actions: [
+                      // Connection Status Badge
+                      _buildConnectionBadge(),
+                      const SizedBox(width: 8),
+                    ],
+                  ),
+
+                  SliverToBoxAdapter(
+                    child: Column(
+                      children: [
+                        // Status Card
+                        _buildStatusCard(),
+
+                        // ECG Graph Card
+                        _buildECGGraphCard(),
+
+                        // Result Card
+                        if (_lastPrediction.isNotEmpty) _buildResultCard(),
+
+                        // Stats Cards
+                        _buildStatsSection(),
+
+                        // Control Section
+                        _buildControlSection(),
+
+                        // History Section
+                        if (_predictionHistory.isNotEmpty)
+                          _buildHistorySection(),
+
+                        const SizedBox(height: 24),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  /// Build connection status badge
+  Widget _buildConnectionBadge() {
+    bool isConnected =
+        _bluetoothConnectionState == fbp.BluetoothConnectionState.connected;
+
+    return GestureDetector(
+      onTap: _connectBluetooth,
+      child: Container(
+        margin: const EdgeInsets.only(right: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isConnected
+              ? Colors.green.withOpacity(0.2)
+              : Colors.white.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isConnected ? Colors.green : Colors.white30,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isConnected ? Icons.bluetooth_connected : Icons.bluetooth,
+              size: 16,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              isConnected ? 'Connected' : 'Connect',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build status card
+  Widget _buildStatusCard() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: _isMonitoring
+                ? [Colors.green.shade400, Colors.green.shade600]
+                : [Colors.grey.shade400, Colors.grey.shade600],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: (_isMonitoring ? Colors.green : Colors.grey)
+                  .withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Status Indicator
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                _isMonitoring ? Icons.monitor_heart : Icons.monitor_heart_outlined,
+                color: Colors.white,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 16),
+            // Status Text
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _isMonitoring ? 'Live Monitoring' : 'Ready to Monitor',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _isMonitoring
+                        ? 'Analyzing ECG data in real-time'
+                        : 'Press START to begin analysis',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.9),
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Live Indicator
+            if (_isMonitoring)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Text(
+                      'LIVE',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build ECG Graph Card
+  Widget _buildECGGraphCard() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Card Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor.withOpacity(0.05),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).primaryColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.show_chart,
+                      color: Theme.of(context).primaryColor,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'ECG Waveform',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  // Data source badge
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _hasCustomCSV
+                          ? Colors.green.withOpacity(0.1)
+                          : Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _hasCustomCSV
+                              ? Icons.file_present
+                              : Icons.data_array,
+                          size: 12,
+                          color:
+                              _hasCustomCSV ? Colors.green : Colors.blue,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _hasCustomCSV ? 'Custom' : 'Sample',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color:
+                                _hasCustomCSV ? Colors.green : Colors.blue,
                           ),
                         ),
                       ],
                     ),
                   ),
-
-                  // Latest Result
-                  if (_lastPrediction.isNotEmpty) ...[
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      child: ResultCard(
-                        label: _lastPrediction,
-                        rawOutput: _lastConfidence / 100,
-                        confidence: _lastConfidence,
-                        isArrhythmia: _lastPrediction == 'ARRHYTHMIA',
-                      ),
-                    ),
-                  ],
-
-                  // Monitoring Stats
-                  _buildMonitoringStats(),
-
-                  // Control Buttons
-                  _buildControlButtons(),
-
-                  // Prediction History
-                  if (_predictionHistory.isNotEmpty)
-                    _buildPredictionHistory(),
-
-                  const SizedBox(height: 16),
                 ],
               ),
             ),
-    );
-  }
-
-  /// Build status banner
-  Widget _buildStatusBanner() {
-    bool isBluetoothConnected =
-        _bluetoothConnectionState == fbp.BluetoothConnectionState.connected;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      color: _isMonitoring
-          ? Colors.green.withOpacity(0.1)
-          : Colors.grey.withOpacity(0.1),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Monitoring Status
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 8,
-                backgroundColor:
-                    _isMonitoring ? Colors.green : Colors.grey,
-                child: _isMonitoring
-                    ? const SizedBox(
-                        width: 8,
-                        height: 8,
-                        child: CircularProgressIndicator(
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : null,
+            // Graph
+            Container(
+              height: 220,
+              margin: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
               ),
-              const SizedBox(width: 8),
-              Text(
-                _isMonitoring ? '● Live Monitoring...' : '○ Stopped',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: _isMonitoring ? Colors.green : Colors.grey,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: ECGGraphWidget(
+                  ecgData: _displayData,
+                  lineColor:
+                      _showArrhythmiaAlert ? Colors.red : Colors.blue.shade700,
                 ),
               ),
-              const Spacer(),
-
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isBluetoothConnected
-                      ? Colors.blue.withOpacity(0.1)
-                      : Colors.grey.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isBluetoothConnected
-                        ? Colors.blue
-                        : Colors.grey,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isBluetoothConnected
-                          ? Icons.bluetooth_connected
-                          : Icons.bluetooth_disabled,
-                      size: 14,
-                      color: isBluetoothConnected
-                          ? Colors.blue
-                          : Colors.grey,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      isBluetoothConnected ? 'Connected' : 'Disconnected',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: isBluetoothConnected
-                            ? Colors.blue
-                            : Colors.grey,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(
-                _hasCustomCSV ? Icons.file_present : Icons.file_copy,
-                size: 14,
-                color: _hasCustomCSV ? Colors.green : Colors.grey,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                _hasCustomCSV ? 'Custom CSV' : 'ECG Data',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: _hasCustomCSV ? Colors.green : Colors.grey,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                _streamingService.isStreaming
-                    ? 'Buffer: ${_streamingService.bufferFilledPercentage}% | Inferences: $_inferenceCount${isBluetoothConnected && _connectedDevice != null ? ' | Sending to ${_connectedDevice!.name}' : ''}'
-                    : 'Ready to analyze ECG data',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildMonitoringStats() {
+  /// Build Result Card
+  Widget _buildResultCard() {
+    bool isArrhythmia = _lastPrediction == 'ARRHYTHMIA';
+
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isArrhythmia
+                ? [Colors.red.shade400, Colors.red.shade600]
+                : [Colors.green.shade400, Colors.green.shade600],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: (isArrhythmia ? Colors.red : Colors.green)
+                  .withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Icon
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isArrhythmia ? Icons.warning_amber : Icons.check_circle,
+                color: Colors.white,
+                size: 32,
+              ),
+            ),
+            const SizedBox(width: 16),
+            // Content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _lastPrediction,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Confidence: ${_lastConfidence.toStringAsFixed(1)}%',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.9),
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Confidence Circle
+            SizedBox(
+              width: 56,
+              height: 56,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  CircularProgressIndicator(
+                    value: _lastConfidence / 100,
+                    backgroundColor: Colors.white.withOpacity(0.3),
+                    valueColor:
+                        const AlwaysStoppedAnimation<Color>(Colors.white),
+                    strokeWidth: 4,
+                  ),
+                  Text(
+                    '${_lastConfidence.toInt()}%',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build Stats Section
+  Widget _buildStatsSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
           Expanded(
             child: _buildStatCard(
               title: 'Total Scans',
               value: '$_inferenceCount',
-              icon: Icons.assessment,
+              icon: Icons.analytics,
+              color: Colors.blue,
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: _buildStatCard(
-              title: 'Buffer Fill',
+              title: 'Buffer',
               value: '${_streamingService.bufferFilledPercentage}%',
               icon: Icons.storage,
+              color: Colors.orange,
             ),
           ),
           const SizedBox(width: 12),
@@ -603,6 +928,7 @@ class _HomeScreenState extends State<HomeScreen> {
               title: 'Data Points',
               value: '${_streamingService.currentDataPoints}',
               icon: Icons.data_usage,
+              color: Colors.purple,
             ),
           ),
         ],
@@ -610,33 +936,51 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Build individual stat card
   Widget _buildStatCard({
     required String title,
     required String value,
     required IconData icon,
+    required Color color,
   }) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(8),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         children: [
-          Icon(icon, size: 20, color: Colors.blue),
-          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 20, color: color),
+          ),
+          const SizedBox(height: 12),
           Text(
             value,
-            style: const TextStyle(
-              fontSize: 18,
+            style: TextStyle(
+              fontSize: 20,
               fontWeight: FontWeight.bold,
+              color: color,
             ),
           ),
+          const SizedBox(height: 4),
           Text(
             title,
             style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
+              fontSize: 11,
+              color: Colors.grey.shade600,
             ),
           ),
         ],
@@ -644,153 +988,309 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildControlButtons() {
+  /// Build Control Section
+  Widget _buildControlSection() {
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          // CSV Loading Section
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blue.withOpacity(0.3)),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-            child: Column(
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Section Header
+            Row(
               children: [
-                Row(
-                  children: [
-                    Icon(
-                      _hasCustomCSV ? Icons.file_present : Icons.file_copy,
-                      color: _hasCustomCSV ? Colors.green : Colors.grey,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _csvStatusMessage,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: _hasCustomCSV ? Colors.green : Colors.grey[600],
-                        ),
-                      ),
-                    ),
-                  ],
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.control_point,
+                    color: Colors.indigo,
+                    size: 20,
+                  ),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _isLoadingCSV ? null : _loadCustomCSV,
-                        icon: _isLoadingCSV
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.upload_file),
-                        label: const Text('UPLOAD CSV'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          backgroundColor: Colors.blue,
-                        ),
-                      ),
-                    ),
-                    if (_hasCustomCSV) ...[
-                      const SizedBox(width: 8),
-                      ElevatedButton.icon(
-                        onPressed: _isLoadingCSV ? null : _resetToSampleData,
-                        icon: const Icon(Icons.restore),
-                        label: const Text('SAMPLE'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                          backgroundColor: Colors.grey,
-                        ),
-                      ),
-                    ],
-                  ],
+                const SizedBox(width: 12),
+                const Text(
+                  'Controls',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 16),
 
-          const SizedBox(height: 16),
+            // CSV Control
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _hasCustomCSV ? Icons.file_present : Icons.file_copy,
+                    color: _hasCustomCSV ? Colors.green : Colors.grey,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _csvStatusMessage,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color:
+                            _hasCustomCSV ? Colors.green.shade700 : Colors.grey.shade600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
 
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _toggleMonitoring,
-                  icon: Icon(_isMonitoring ? Icons.pause : Icons.play_arrow),
-                  label: Text(_isMonitoring ? 'STOP' : 'START'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    backgroundColor:
-                        _isMonitoring ? Colors.red : Colors.green,
+            // Action Buttons
+            Row(
+              children: [
+                // Start/Stop Button
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton(
+                    onPressed: _toggleMonitoring,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor:
+                          _isMonitoring ? Colors.red : Colors.green,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 2,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _isMonitoring ? Icons.stop : Icons.play_arrow,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _isMonitoring ? 'STOP' : 'START',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _resetMonitoring,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('RESET'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                const SizedBox(width: 12),
+                // Reset Button
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _resetMonitoring,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      side: BorderSide(color: Colors.grey.shade300),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.refresh, color: Colors.grey),
+                        SizedBox(width: 4),
+                        Text(
+                          'RESET',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // CSV Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoadingCSV ? null : _loadCustomCSV,
+                    icon: _isLoadingCSV
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.upload_file, size: 18),
+                    label: const Text('Upload CSV'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: Colors.blue,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+                if (_hasCustomCSV) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _isLoadingCSV ? null : _resetToSampleData,
+                      icon: const Icon(Icons.restore, size: 18),
+                      label: const Text('Sample Data'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        foregroundColor: Colors.grey.shade700,
+                        side: BorderSide(color: Colors.grey.shade300),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  /// Build prediction history
-  Widget _buildPredictionHistory() {
+  /// Build History Section
+  Widget _buildHistorySection() {
     return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Recent Predictions',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey[300]!),
-              borderRadius: BorderRadius.circular(8),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor.withOpacity(0.05),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).primaryColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.history,
+                      color: Theme.of(context).primaryColor,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Recent Predictions',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            child: ListView.separated(
+            // History List
+            ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: _predictionHistory.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemCount: _predictionHistory.length > 5
+                  ? 5
+                  : _predictionHistory.length,
+              separatorBuilder: (_, __) => Divider(
+                height: 1,
+                color: Colors.grey.shade200,
+              ),
               itemBuilder: (context, index) {
                 final pred = _predictionHistory[index];
                 bool isArrhythmia = pred['label'] == 'ARRHYTHMIA';
                 return ListTile(
-                  leading: Icon(
-                    isArrhythmia ? Icons.warning : Icons.favorite,
-                    color: isArrhythmia ? Colors.red : Colors.green,
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: (isArrhythmia ? Colors.red : Colors.green)
+                          .withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isArrhythmia ? Icons.warning : Icons.favorite,
+                      color: isArrhythmia ? Colors.red : Colors.green,
+                      size: 20,
+                    ),
                   ),
-                  title: Text(pred['label']),
+                  title: Text(
+                    pred['label'],
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: isArrhythmia ? Colors.red : Colors.green.shade700,
+                    ),
+                  ),
                   subtitle: Text(
-                      '${pred['confidence'].toStringAsFixed(1)}% at ${_formatTime(pred['timestamp'])}'),
-                  dense: true,
+                    '${pred['confidence'].toStringAsFixed(1)}% • ${_formatTime(pred['timestamp'])}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  trailing: Icon(
+                    Icons.chevron_right,
+                    color: Colors.grey.shade400,
+                  ),
                 );
               },
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -798,4 +1298,51 @@ class _HomeScreenState extends State<HomeScreen> {
   String _formatTime(DateTime time) {
     return '${time.hour}:${time.minute.toString().padLeft(2, '0')}:${time.second.toString().padLeft(2, '0')}';
   }
+}
+
+/// Custom painter for ECG pattern background
+class _ECGPatternPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withOpacity(0.05)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    // Draw ECG-like wave pattern
+    final path = Path();
+    double y = size.height * 0.6;
+    double x = 0;
+
+    while (x < size.width) {
+      // P wave
+      path.moveTo(x, y);
+      path.quadraticBezierTo(x + 10, y - 5, x + 20, y);
+      x += 20;
+
+      // QRS complex
+      path.moveTo(x, y);
+      path.lineTo(x + 5, y);
+      path.lineTo(x + 8, y + 20); // Q
+      path.lineTo(x + 12, y - 30); // R
+      path.lineTo(x + 16, y + 15); // S
+      path.lineTo(x + 20, y);
+      x += 20;
+
+      // T wave
+      path.moveTo(x, y);
+      path.quadraticBezierTo(x + 10, y - 8, x + 20, y);
+      x += 20;
+
+      // Baseline
+      path.moveTo(x, y);
+      path.lineTo(x + 30, y);
+      x += 30;
+    }
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

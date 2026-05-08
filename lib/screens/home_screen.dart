@@ -348,7 +348,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
   /// Show snackbar
   void _showSnackbar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -370,72 +369,79 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Theme.of(context).primaryColor.withOpacity(0.1),
-              Colors.white,
-            ],
-          ),
+      appBar: AppBar(
+        backgroundColor: Colors.indigo.shade700,
+        elevation: 0,
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: Colors.white.withOpacity(0.2),
+              backgroundImage: const AssetImage('assets/icon.png'),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'ECG Monitor',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ],
         ),
-        child: _isModelLoading
-            ? const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text('Initializing ECG System...'),
-                  ],
-                ),
-              )
-            : CustomScrollView(
-                slivers: [
-                  // Pinned Header - Visible on scroll
-                  SliverAppBar(
-                    expandedHeight: 220,
-                    floating: false,
-                    pinned: true,
-                    stretch: true,
-                    backgroundColor: Colors.indigo.shade700,
-                    flexibleSpace: FlexibleSpaceBar(
-                      background: _buildPerfectHeader(),
-                    ),
-                  ),
-
-                  // Content below pinned header
-                  SliverToBoxAdapter(
-                    child: Column(
-                      children: [
-                        // Status Card
-                        _buildStatusCard(),
-
-                        // ECG Graph Card
-                        _buildECGGraphCard(),
-
-                        // Result Card
-                        if (_lastPrediction.isNotEmpty) _buildResultCard(),
-
-                        // Stats Cards
-                        _buildStatsSection(),
-
-                        // Control Section
-                        _buildControlSection(),
-
-                        // History Section
-                        if (_predictionHistory.isNotEmpty)
-                          _buildHistorySection(),
-
-                        const SizedBox(height: 24),
-                      ],
-                    ),
-                  ),
+        centerTitle: false,
+        actions: [
+          _buildConnectionBadge(),
+        ],
+      ),
+      body: _isModelLoading
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Initializing ECG System...'),
                 ],
               ),
-      ),
+            )
+          : SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  // Status Card
+                  _buildStatusCard(),
+                  const SizedBox(height: 16),
+
+                  // ECG Graph Card
+                  _buildECGGraphCard(),
+                  const SizedBox(height: 16),
+
+                  // Result Card
+                  if (_lastPrediction.isNotEmpty) ...[
+                    _buildResultCard(),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // Stats Cards
+                  _buildStatsSection(),
+                  const SizedBox(height: 16),
+
+                  // Control Section
+                  _buildControlSection(),
+                  const SizedBox(height: 16),
+
+                  // History Section
+                  if (_predictionHistory.isNotEmpty) ...[
+                    _buildHistorySection(),
+                  ],
+
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
     );
   }
 
@@ -473,154 +479,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: Colors.white,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Build Perfect Responsive Header
-  Widget _buildPerfectHeader() {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.indigo.shade800,
-            Colors.indigo.shade600,
-            Colors.purple.shade600,
-          ],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.indigo.withOpacity(0.4),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-
-            // Logo - Perfect Centered with local image
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.4),
-                  width: 3,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 30,
-                    spreadRadius: 5,
-                  ),
-                ],
-              ),
-              child: ClipOval(
-                child: Image.asset(
-                  'assets/icon.png',
-                  fit: BoxFit.cover,
-                  width: 100,
-                  height: 100,
-                  errorBuilder: (context, error, stackTrace) {
-                    // Fallback to icon if image fails
-                    return const Icon(
-                      Icons.monitor_heart,
-                      color: Colors.white,
-                      size: 52,
-                    );
-                  },
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // Title - Perfect Centered
-            const Text(
-              'ECG monitor',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-                letterSpacing: 1.0,
-                height: 1.2,
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Status Row - Perfect Centered with Bluetooth
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 30),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Monitoring Status
-                  Expanded(
-                    child: _buildStatusPill(
-                      icon: _isMonitoring ? Icons.favorite : Icons.favorite_border,
-                      label: _isMonitoring ? 'Monitoring' : 'Standby',
-                      color: _isMonitoring ? Colors.greenAccent : Colors.orangeAccent,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  // Bluetooth Status - Tappable
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: _connectBluetooth,
-                      child: _buildStatusPill(
-                        icon: _bluetoothConnectionState == fbp.BluetoothConnectionState.connected
-                            ? Icons.bluetooth_connected
-                            : Icons.bluetooth,
-                        label: _bluetoothConnectionState == fbp.BluetoothConnectionState.connected
-                            ? 'Connected'
-                            : 'Tap to Connect',
-                        color: _bluetoothConnectionState == fbp.BluetoothConnectionState.connected
-                            ? Colors.cyanAccent
-                            : Colors.grey,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 30),
-
-            // Bottom decorative line
-            Container(
-              width: 60,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Bottom Curve
-            Container(
-              height: 35,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(30),
-                  topRight: Radius.circular(30),
-                ),
               ),
             ),
           ],

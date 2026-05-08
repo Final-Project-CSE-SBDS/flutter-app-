@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 import '../services/bluetooth_service.dart';
@@ -27,8 +28,18 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
   /// UI State
   bool _isScanning = false;
   bool _isConnecting = false;
+  bool _isDiscoveringServices = false;
   String? _statusMessage;
   String? _discoveryLog;
+  String? _disconnectReason;
+  
+  /// Service discovery data
+  List<Map<String, dynamic>> _discoveredServices = [];
+  bool _servicesExpanded = false;
+  
+  /// Keep-alive timer
+  Timer? _keepAliveTimer;
+  static const Duration _keepAliveDuration = Duration(seconds: 10);
 
   @override
   void initState() {
@@ -71,10 +82,13 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
           _statusMessage = '✅ Connected successfully!';
           _selectedDevice = widget.bluetoothService.connectedDevice;
           _addLog('✅ Device connected');
+          _disconnectReason = null;
+          _startKeepAlive();
         } else if (state == fbp.BluetoothConnectionState.disconnected) {
-          _statusMessage = '❌ Disconnected';
+          _statusMessage = _disconnectReason ?? '❌ Disconnected';
           _selectedDevice = null;
-          _addLog('❌ Device disconnected');
+          _addLog('❌ Device disconnected - Reason: ${_disconnectReason ?? "Unknown"}');
+          _stopKeepAlive();
         }
       });
     });
@@ -209,6 +223,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
   /// Disconnect from device
   Future<void> _disconnect() async {
     _addLog('Disconnecting...');
+    _stopKeepAlive();
     await widget.bluetoothService.disconnectDevice();
     setState(() {
       _selectedDevice = null;
@@ -216,8 +231,109 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
     });
   }
 
+  /// Start keep-alive timer to maintain BLE connection
+  void _startKeepAlive() {
+    _keepAliveTimer?.cancel();
+    _addLog('🔄 Starting keep-alive timer (every ${_keepAliveDuration.inSeconds}s)...');
+    
+    _keepAliveTimer = Timer.periodic(_keepAliveDuration, (timer) {
+      if (_selectedDevice != null && _connectionState == fbp.BluetoothConnectionState.connected) {
+        _addLog('💚 Keep-alive ping sent...');
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  /// Stop keep-alive timer
+  void _stopKeepAlive() {
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
+    _addLog('⏹️  Keep-alive timer stopped');
+  }
+
+  /// Discover all services and characteristics
+  Future<void> _discoverServices() async {
+    if (_selectedDevice == null) return;
+    
+    setState(() {
+      _isDiscoveringServices = true;
+      _addLog('🔍 Discovering services and characteristics...');
+    });
+
+    try {
+      List<fbp.BluetoothService> services = await _selectedDevice!.discoverServices();
+      
+      _discoveredServices.clear();
+      
+      if (services.isEmpty) {
+        setState(() {
+          _addLog('⚠️  No services discovered');
+        });
+        return;
+      }
+
+      _addLog('✅ Found ${services.length} service(s)\n');
+
+      for (var service in services) {
+        final serviceUUID = service.uuid.toString().toLowerCase();
+        final characteristics = <Map<String, dynamic>>[];
+
+        for (var char in service.characteristics) {
+          final charUUID = char.uuid.toString().toLowerCase();
+          
+          characteristics.add({
+            'uuid': charUUID,
+            'read': char.properties.read,
+            'write': char.properties.write,
+            'writeWithoutResponse': char.properties.writeWithoutResponse,
+            'notify': char.properties.notify,
+            'indicate': char.properties.indicate,
+          });
+
+          // Log characteristic details
+          _addLog('Service: ${_formatUUID(serviceUUID)}');
+          _addLog('  Characteristic: ${_formatUUID(charUUID)}');
+          _addLog('  Properties:');
+          _addLog('    read: ${char.properties.read}');
+          _addLog('    write: ${char.properties.write}');
+          _addLog('    notify: ${char.properties.notify}');
+          _addLog('    indicate: ${char.properties.indicate}');
+          _addLog('');
+        }
+
+        _discoveredServices.add({
+          'uuid': serviceUUID,
+          'characteristics': characteristics,
+        });
+      }
+
+      setState(() {
+        _servicesExpanded = true;
+        _addLog('✅ Service discovery complete!');
+      });
+    } catch (e) {
+      setState(() {
+        _addLog('❌ Service discovery failed: $e');
+      });
+    } finally {
+      setState(() {
+        _isDiscoveringServices = false;
+      });
+    }
+  }
+
+  /// Format UUID for readability (show last 4 chars)
+  String _formatUUID(String uuid) {
+    if (uuid.length >= 4) {
+      return uuid.substring(uuid.length - 4).toUpperCase();
+    }
+    return uuid.toUpperCase();
+  }
+
   @override
   void dispose() {
+    _stopKeepAlive();
     if (_isScanning) {
       _stopScan();
     }
@@ -320,17 +436,36 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Disconnect Button (if connected)
+              // Disconnect & Discover Services (if connected)
               if (isConnected) ...[
-                ElevatedButton.icon(
-                  onPressed: _disconnect,
-                  icon: const Icon(Icons.bluetooth_disabled),
-                  label: const Text('Disconnect'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _isDiscoveringServices ? null : _discoverServices,
+                        icon: Icon(_isDiscoveringServices ? Icons.hourglass_bottom : Icons.search),
+                        label: Text(_isDiscoveringServices ? 'Discovering...' : 'Discover Services'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _disconnect,
+                        icon: const Icon(Icons.bluetooth_disabled),
+                        label: const Text('Disconnect'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
               ],
@@ -458,10 +593,143 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
               const SizedBox(height: 24),
               const Divider(),
               const SizedBox(height: 12),
+              
+              // Services Display (if services discovered)
+              if (_discoveredServices.isNotEmpty) ...[
+                _buildServicesSection(),
+                const SizedBox(height: 24),
+                const Divider(),
+                const SizedBox(height: 12),
+              ],
+              
               _buildDiscoveryLogSection(),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// Build services and characteristics display
+  Widget _buildServicesSection() {
+    return ExpansionTile(
+      initiallyExpanded: _servicesExpanded,
+      title: const Text(
+        'GATT Services & Characteristics',
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+      ),
+      subtitle: Text('${_discoveredServices.length} service(s) discovered'),
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue.shade200),
+          ),
+          child: ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _discoveredServices.length,
+            itemBuilder: (context, serviceIndex) {
+              final service = _discoveredServices[serviceIndex];
+              final characteristics = service['characteristics'] as List<Map<String, dynamic>>;
+              
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Service UUID
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '🔧 Service: ${_formatUUID(service['uuid'] as String)}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    
+                    // Characteristics
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: characteristics.length,
+                      itemBuilder: (context, charIndex) {
+                        final char = characteristics[charIndex];
+                        
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8, left: 16),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border.all(color: Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '📄 Char: ${_formatUUID(char['uuid'] as String)}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Properties:',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 12, top: 4),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      _buildPropertyRow('read', char['read'] as bool),
+                                      _buildPropertyRow('write', char['write'] as bool),
+                                      _buildPropertyRow('notify', char['notify'] as bool),
+                                      _buildPropertyRow('indicate', char['indicate'] as bool),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Build property row
+  Widget _buildPropertyRow(String property, bool value) {
+    return Text(
+      '${value ? '✓' : '✗'} $property: ${value ? 'true' : 'false'}',
+      style: TextStyle(
+        fontSize: 10,
+        color: value ? Colors.green : Colors.grey,
+        fontWeight: value ? FontWeight.w600 : FontWeight.normal,
       ),
     );
   }

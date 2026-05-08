@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/services.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
@@ -155,30 +156,42 @@ class TFLiteService {
         } else {
           rawProb = output[0];
         }
+        // Apply sigmoid to convert raw output to probability
+        rawProb = 1 / (1 + exp(-rawProb));
         isArrhythmia = rawProb > 0.5;
         confidence = (isArrhythmia ? rawProb : 1.0 - rawProb) * 100.0;
       } else if (outSize == 2 && outShape.length == 2 && outShape[0] == 1) {
-        // Two-class output: [1,2]
+        // Two-class output: [1,2] - apply softmax
         final p0 = (output[0][0] as num).toDouble();
         final p1 = (output[0][1] as num).toDouble();
-        // choose class with higher score
-        final predicted = p1 > p0 ? 1 : 0;
+        // Softmax: exp(x) / sum(exp(xi))
+        final exp0 = exp(p0);
+        final exp1 = exp(p1);
+        final softmax0 = exp0 / (exp0 + exp1);
+        final softmax1 = exp1 / (exp0 + exp1);
+        // Choose class with higher probability
+        final predicted = softmax1 > softmax0 ? 1 : 0;
         isArrhythmia = predicted == 1;
-        rawProb = isArrhythmia ? p1 : p0;
+        rawProb = isArrhythmia ? softmax1 : softmax0;
         confidence = rawProb * 100.0;
       } else {
-        // Generic: take first element
+        // Generic: take first element with sigmoid
         if (outShape.length == 2) {
           rawProb = (output[0][0] as num).toDouble();
         } else {
           rawProb = (output[0] as num).toDouble();
         }
+        // Apply sigmoid
+        rawProb = 1 / (1 + exp(-rawProb));
         isArrhythmia = rawProb > 0.5;
         confidence = (isArrhythmia ? rawProb : 1.0 - rawProb) * 100.0;
       }
     } catch (e) {
       throw Exception('Failed to parse model output: $e');
     }
+
+    // Clamp confidence to valid range [0, 100]
+    confidence = confidence.clamp(0.0, 100.0);
 
     final result = {
       'label': isArrhythmia ? 'ARRHYTHMIA' : 'NORMAL',

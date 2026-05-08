@@ -254,7 +254,6 @@ class NotificationService {
       rethrow;
     }
   }
-
   // ============= Utility Methods =============
   /// Perform device vibration pattern
   /// Three short vibrations for alerts
